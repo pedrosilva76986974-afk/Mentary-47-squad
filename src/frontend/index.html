@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#302080" />
+    <title>Envio de documento | Mentary</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="https://mentary.com.br/" aria-label="Mentary, site institucional">
+          <img src="/assets/mentary-logo.png" alt="" />
+        </a>
+        <nav aria-label="Navegação principal">
+          <a href="https://mentary.com.br/">INÍCIO</a>
+          <a class="active" href="/">ENVIAR MATERIAL</a>
+        </nav>
+      </header>
+
+      <main class="hero-layout">
+        <section class="hero-copy" aria-labelledby="page-title">
+          <div class="eyebrow"><span></span> INOVAÇÃO EDUCACIONAL</div>
+          <h1 id="page-title">Seus materiais,<br />prontos para <span>inovar.</span></h1>
+          <p class="intro">Envie provas e atividades para transformar conteúdo educacional em novas possibilidades de aprendizagem.</p>
+          <div class="capabilities" aria-label="Recursos de extração">
+            <span><b aria-hidden="true">✓</b> Extração de texto</span>
+            <span><b aria-hidden="true">✓</b> OCR em português</span>
+          </div>
+          <div class="formats-note">PDF · PNG · JPG <i></i> Arquivos de até 20 MB</div>
+        </section>
+
+        <section class="upload-card" aria-labelledby="upload-title">
+          <div class="card-heading">
+            <div class="card-icon" aria-hidden="true"><span>↑</span></div>
+            <div>
+              <p class="card-kicker">NOVO MATERIAL</p>
+              <h2 id="upload-title">Enviar documento</h2>
+            </div>
+          </div>
+          <p class="card-intro">Selecione uma prova ou atividade para começar.</p>
+
+          <form id="upload-form">
+            <label class="drop-area" for="document-file">
+              <span class="file-icon" aria-hidden="true">↑</span>
+              <span class="drop-title">Escolha um arquivo</span>
+              <span class="drop-subtitle">ou clique aqui para procurar no dispositivo</span>
+              <input
+                id="document-file"
+                name="document"
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                required
+              />
+            </label>
+
+            <div id="file-details" class="file-details" hidden></div>
+            <button id="submit-button" class="submit-button" type="submit" disabled>Enviar material <span aria-hidden="true">→</span></button>
+          </form>
+
+          <div id="feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+          <p class="privacy-note"><span aria-hidden="true">◆</span> O documento é validado antes de ser processado.</p>
+        </section>
+
+        <section id="review-panel" class="review-panel" aria-labelledby="review-title" hidden>
+          <div class="review-heading">
+            <div>
+              <p class="card-kicker">ETAPA DE REVISÃO</p>
+              <h2 id="review-title">Questões identificadas</h2>
+              <p id="review-summary" class="review-summary"></p>
+            </div>
+            <span id="review-count" class="review-count"></span>
+          </div>
+          <div id="questions-list" class="questions-list"></div>
+          <details id="source-preview" class="source-preview" hidden>
+            <summary>Consultar texto extraído do documento</summary>
+            <pre id="source-text"></pre>
+          </details>
+          <a id="review-record-link" class="review-record-link" target="_blank" rel="noopener noreferrer">Abrir registro completo da revisão ↗</a>
+        </section>
+      </main>
+      <footer><span>MENTARY</span><i></i> TECNOLOGIA QUE MOVE A EDUCAÇÃO</footer>
+    </div>
+  </body>
+</html>

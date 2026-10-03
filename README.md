@@ -8,7 +8,7 @@ Extrator de Questões e Módulo de Inteligência Avaliativa.
 - Conexão com a internet durante a instalação das dependências. No primeiro uso do OCR, o Tesseract.js também pode precisar baixar os dados do idioma português.
 - Windows, macOS ou Linux.
 
-Por enquanto, o projeto tem o backend de upload e extração. A interface frontend e a integração com banco de dados ainda não fazem parte deste passo; não é necessário configurar um banco para iniciar a API.
+O projeto inclui o backend de upload e extração e uma tela simples de envio servida pela própria API. A integração com banco de dados ainda não está configurada; não é necessário configurar um banco para iniciar o projeto.
 
 ## Instalar e iniciar o backend
 
@@ -20,7 +20,7 @@ npm install
 npm run dev
 ```
 
-A API ficará disponível em `http://localhost:3000`. Para confirmar que iniciou, acesse `http://localhost:3000/health` ou execute em outro terminal:
+A tela de envio ficará disponível em `http://localhost:3000`. Para confirmar que a API está ativa, acesse `http://localhost:3000/health` ou execute em outro terminal:
 
 ```powershell
 curl.exe http://localhost:3000/health
@@ -36,13 +36,17 @@ A resposta esperada é:
 
 O endpoint `POST /documents` recebe o arquivo no campo `document`. Neste momento, são aceitos PDF, PNG e JPG/JPEG, com tamanho máximo de 20 MB. PDFs podem ter até 50 páginas.
 
-Exemplo no PowerShell, substituindo o caminho pelo arquivo desejado:
+Você pode selecionar um arquivo na tela em `http://localhost:3000` ou enviá-lo pelo PowerShell, substituindo o caminho pelo arquivo desejado:
 
 ```powershell
 curl.exe -F "document=@C:\caminho\para\prova.pdf" http://localhost:3000/documents
 ```
 
-PDFs que já contêm texto são processados por extração direta. Imagens e PDFs escaneados passam pelo OCR em português. A resposta inclui o texto extraído, a quantidade de páginas e o método usado (`pdf-text` ou `ocr`).
+O sistema confere extensão, tipo informado e conteúdo real do arquivo antes de processá-lo. PDFs que já contêm texto são processados por extração direta. Imagens e PDFs escaneados passam pelo OCR em português. Em seguida, o parser procura questões com rótulos como `Questão 1`, numeração acompanhada de um enunciado ou perguntas diretas. Cada questão recebe número, texto, páginas de origem e status `pending_review`.
+
+As questões ficam disponíveis na tela de revisão logo após o envio. Também podem ser consultadas pela rota `GET /documents/{id}/review`, usando o `id` retornado pelo upload. Se nenhum enunciado for identificado, o sistema informa isso, salva um resultado sem questões e disponibiliza o texto extraído para conferência. Se a extração falhar ou não produzir texto legível, a operação retorna erro e não cria um resultado de revisão.
+
+Os registros de origem ficam em `src/backend/uploads/manifest.json`, com nome do arquivo, tipo, tamanho, data e hash SHA-256. Os resultados de revisão — incluindo texto extraído e questões pendentes — ficam em arquivos JSON dentro de `src/backend/uploads/reviews`. O arquivo original é mantido apenas em memória durante o processamento; os resultados ainda não usam banco de dados.
 
 ## Verificar o projeto
 
@@ -57,8 +61,8 @@ npm run build
 
 ## Estrutura
 
-- `src/backend` — API e regras de negócio
-- `src/frontend` — interface da aplicação (em desenvolvimento)
+- `src/backend` — API, extração de documentos, identificação de questões e resultados de revisão
+- `src/frontend` — tela de envio de documentos
 - `docs` — documentação do projeto
 - `database` — scripts e estrutura do banco de dados
-- `test` — testes automatizados do backend
+- `src/backend/test` — testes automatizados do backend
