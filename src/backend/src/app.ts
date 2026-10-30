@@ -7,8 +7,9 @@ import { DocumentValidationError } from "./services/document-validation.service.
 import { DocumentProcessingError } from "./services/document-processing-error.js";
 
 const app = express();
-const frontendPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../frontend");
+const frontendPath = resolve(dirname(fileURLToPath(import.meta.url)), "../public");
 
+app.use(express.json({ limit: "100kb" }));
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/documents", documentsRouter);
 app.use(express.static(frontendPath));

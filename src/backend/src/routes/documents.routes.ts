@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
-import { getDocumentReview, uploadAndExtract } from "../controllers/documents.controller.js";
+import { getDocumentReview, getDocumentSource, updateDocumentReviewQuestion, uploadAndExtract } from "../controllers/documents.controller.js";
+import { limitConcurrentUploads } from "../middlewares/upload-concurrency.middleware.js";
 import { DocumentValidationError } from "../services/document-validation.service.js";
 
 const router = Router();
@@ -17,7 +18,9 @@ const upload = multer({
   },
 });
 
-router.post("/", upload.single("document"), uploadAndExtract);
+router.post("/", limitConcurrentUploads, upload.single("document"), uploadAndExtract);
 router.get("/:documentId/review", getDocumentReview);
+router.get("/:documentId/source", getDocumentSource);
+router.patch("/:documentId/review/questions/:questionId", updateDocumentReviewQuestion);
 
 export { router as documentsRouter };

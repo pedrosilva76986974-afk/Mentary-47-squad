@@ -1,8 +1,8 @@
 import { extname } from "node:path";
 import { loadImage } from "@napi-rs/canvas";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
+import { MAX_PDF_PAGES, standardFontDataUrl } from "./pdf-config.js";
 
-const MAX_PDF_PAGES = 50;
 const MAX_IMAGE_PIXELS = 40_000_000;
 const MAX_IMAGE_SIDE = 10_000;
 
@@ -40,12 +40,15 @@ async function validateDocument(file: UploadCandidate): Promise<void> {
 
   try {
     if (format.mimeType === "application/pdf") {
-      const loadingTask = pdfjs.getDocument({ data: new Uint8Array(file.buffer) });
-      const pdf = await loadingTask.promise;
-      const pages = pdf.numPages;
-      await loadingTask.destroy();
-      if (pages === 0 || pages > MAX_PDF_PAGES) {
-        throw new DocumentValidationError(`O PDF deve ter entre 1 e ${MAX_PDF_PAGES} páginas.`);
+      const loadingTask = pdfjs.getDocument({ data: new Uint8Array(file.buffer), standardFontDataUrl });
+      try {
+        const pdf = await loadingTask.promise;
+        const pages = pdf.numPages;
+        if (pages === 0 || pages > MAX_PDF_PAGES) {
+          throw new DocumentValidationError(`O PDF deve ter entre 1 e ${MAX_PDF_PAGES} páginas.`);
+        }
+      } finally {
+        await loadingTask.destroy().catch(() => undefined);
       }
     } else {
       const image = await loadImage(file.buffer);
