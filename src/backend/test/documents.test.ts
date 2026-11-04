@@ -54,7 +54,7 @@ test("GET / serves the built React frontend", { skip: !existsSync(new URL("../pu
 });
 
 test("POST /documents extracts text from a digital PDF", async () => {
-  const expectedText = "Questão 1: Quanto é 2 + 2? Questão 2: Quanto é 3 + 3?";
+  const expectedText = "Questão 1: Quanto é 2 + 2? A) 3 B) 4 Questão 2: Quanto é 3 + 3? A) 5 B) 6";
   const response = await request(app)
     .post("/documents")
     .attach("document", await createPdf(expectedText), {
@@ -253,6 +253,24 @@ test("POST /documents stores an empty review result when no questions are found"
   assert.equal(review.status, 200);
   assert.equal(review.body.status, "no_questions");
   assert.deepEqual(review.body.questions, []);
+});
+
+test("keeps an objective question with unreadable alternatives flagged for manual review", async () => {
+  const upload = await request(app)
+    .post("/documents")
+    .attach("document", await createPdf("Questão 1: Marque a alternativa correta sobre fotossíntese."), {
+      filename: "incomplete-objective-question.pdf",
+      contentType: "application/pdf",
+    });
+  assert.equal(upload.status, 200);
+  assert.equal(upload.body.questionCount, 1);
+  assert.ok(upload.body.questions[0].missingComponents.includes("alternatives"));
+
+  const approval = await request(app)
+    .patch(`/documents/${upload.body.origin.id}/review/questions/${upload.body.questions[0].id}`)
+    .send({ answerKey: "A", reviewedBy: "Professora Ana", status: "approved" });
+  assert.equal(approval.status, 400);
+  assert.match(approval.body.error, /pelo menos duas alternativas/);
 });
 
 test("document validation accepts real PNG and JPEG images", async () => {

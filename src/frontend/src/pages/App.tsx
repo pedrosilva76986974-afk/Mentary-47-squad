@@ -14,9 +14,8 @@ type Question = {
   number: number | null;
   text: string;
   prompt?: string;
-  answer?: string | null;
   answerKey?: string | null;
-  responseType?: "open" | "multiple_choice" | "mixed" | "unknown";
+  responseType?: "multiple_choice";
   alternatives?: Array<{ label: string; text: string }>;
   pedagogy?: {
     discipline?: string;
@@ -358,7 +357,7 @@ function App() {
                       </details>
                     )}
                     <span className="question-type">
-                      {getResponseTypeLabel(question.responseType)}
+                      {getResponseTypeLabel()}
                     </span>
                     <section className="question-section">
                       <h3>Enunciado</h3>
@@ -370,33 +369,12 @@ function App() {
                     {question.missingComponents?.some((component) => component !== "prompt") && (
                       <p className="question-answer-empty">
                         {question.missingComponents.includes("alternatives") && "Alternativas não identificadas. "}
-                        {question.missingComponents.includes("answer") && "Gabarito/resposta não identificado no documento."}
+                        {question.missingComponents.includes("answer") && "Gabarito não identificado no documento."}
                       </p>
                     )}
                     <section className="question-section">
-                      <h3>{question.alternatives?.length
-                        ? question.responseType === "open"
-                          ? "Itens da questão"
-                          : question.responseType === "mixed" ? "Alternativas e resposta aberta" : "Resposta / alternativas"
-                        : "Resposta"}</h3>
-                      {question.responseType === "mixed" ? (
-                        <>
-                          {question.alternatives && question.alternatives.length > 0 && (
-                            <ul className="question-alternatives">
-                              {question.alternatives.map((alternative, alternativeIndex) => (
-                                <li key={`${alternative.label}-${alternativeIndex}`}>
-                                  <strong>{alternative.label}</strong> {alternative.text}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          <p className="question-text">
-                            {question.answer ? <><strong>Resposta aberta:</strong> {question.answer}</> : getMissingAnswerMessage("open")}
-                          </p>
-                        </>
-                      ) : question.answer ? (
-                        <p className="question-text">{question.answer}</p>
-                      ) : question.alternatives && question.alternatives.length > 0 ? (
+                      <h3>Alternativas</h3>
+                      {question.alternatives && question.alternatives.length > 0 ? (
                         <ul className="question-alternatives">
                           {question.alternatives.map((alternative, alternativeIndex) => (
                             <li key={`${alternative.label}-${alternativeIndex}`}>
@@ -406,7 +384,7 @@ function App() {
                         </ul>
                       ) : (
                         <p className="question-answer-empty">
-                          {getMissingAnswerMessage(question.responseType)}
+                          {getMissingAnswerMessage()}
                         </p>
                       )}
                     </section>

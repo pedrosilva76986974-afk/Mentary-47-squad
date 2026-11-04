@@ -11,9 +11,8 @@ type ParsedQuestion = {
   number: number | null;
   text: string;
   prompt?: string;
-  answer?: string | null;
   answerKey?: string | null;
-  responseType?: "open" | "multiple_choice" | "mixed" | "unknown";
+  responseType?: "multiple_choice";
   alternatives?: Array<{ label: string; text: string }>;
   missingComponents?: Array<"prompt" | "alternatives" | "answer">;
   pageStart: number;

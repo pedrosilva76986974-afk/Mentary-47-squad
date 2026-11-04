@@ -1,7 +1,7 @@
 import { classifyQuestionsWithOllamaDetailed, type OllamaMetrics, type QuestionClassification } from "./ollama.service.js";
 import { applyPrintedAnswerKey } from "./answer-key.service.js";
 import { parseQuestions, type ParsedQuestion } from "./question-parser.service.js";
-import { isExerciseList, structureQuestion } from "./question-structure.service.js";
+import { isObjectiveQuestion, structureQuestion } from "./question-structure.service.js";
 
 type IdentificationDiagnostics = {
   method: "ollama" | "ollama+rules" | "rules";
@@ -17,15 +17,10 @@ type IdentificationResult = { questions: ParsedQuestion[]; diagnostics: Identifi
 
 function runLocalParser(pageTexts: string[]): { questions: ParsedQuestion[]; durationMs: number } {
   const startedAt = Date.now();
-  const questions = parseQuestions(pageTexts).map((question) => structureQuestion(question));
+  const questions = parseQuestions(pageTexts)
+    .map((question) => structureQuestion(question))
+    .filter(isObjectiveQuestion);
   return { questions, durationMs: Date.now() - startedAt };
-}
-
-function isCompatibleClassification(question: ParsedQuestion, responseType: QuestionClassification["responseType"]): boolean {
-  const alternatives = question.alternatives ?? [];
-  if (responseType === "multiple_choice" || responseType === "mixed") return alternatives.length >= 2;
-  if (responseType === "open") return alternatives.length === 0 || isExerciseList(alternatives);
-  return false;
 }
 
 function applyClassifications(
@@ -34,13 +29,13 @@ function applyClassifications(
 ): { questions: ParsedQuestion[]; appliedCount: number } {
   const byIndex = new Map(classifications.map((classification) => [classification.questionIndex, classification]));
   let appliedCount = 0;
-  const classifiedQuestions = questions.map((question, index) => {
+  const classifiedQuestions = questions.flatMap((question, index) => {
     const classification = byIndex.get(index);
-    if (!classification || classification.confidence !== "high"
-      || !isCompatibleClassification(question, classification.responseType)) return question;
+    if (!classification || classification.confidence !== "high") return [question];
     appliedCount += 1;
-    // The model may classify only. OCR text, prompt, answer and alternatives stay byte-for-byte from local code.
-    return { ...question, responseType: classification.responseType };
+    if (!classification.isMultipleChoice) return [];
+    // Ollama only classifies; OCR text, prompt and alternatives stay from local code.
+    return [{ ...question, responseType: "multiple_choice" as const }];
   });
   return { questions: classifiedQuestions, appliedCount };
 }

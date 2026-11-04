@@ -17,15 +17,15 @@ type OllamaMetrics = {
 
 type QuestionClassification = {
   questionIndex: number;
-  responseType: NonNullable<ParsedQuestion["responseType"]>;
+  isMultipleChoice: boolean;
   confidence: "high" | "medium";
 };
 
 const classificationInstructions = [
   "Você classifica questões que já foram extraídas e separadas pelo sistema local.",
   "Não extraia, transcreva, reescreva, corrija, resuma ou complete conteúdo. Não devolva texto de enunciado, alternativa ou resposta.",
-  "Para cada questionIndex, escolha somente responseType: open, multiple_choice, mixed ou unknown.",
-  "Use multiple_choice quando houver alternativas e a tarefa for escolher; open para resposta escrita sem alternativas; mixed quando houver alternativas e também justificativa ou desenvolvimento escrito; unknown quando não for possível distinguir.",
+  "Para cada questão, informe somente isMultipleChoice: true ou false.",
+  "Marque true quando a questão pede para selecionar uma alternativa, inclusive quando o OCR não conseguiu reconhecer as alternativas mas o enunciado deixa claro que elas existem. Marque false para perguntas discursivas, listas de exercícios que pedem cálculos individuais ou agrupamentos incorretos de questões.",
   "Preserve os índices recebidos. Marque confidence high somente quando a classificação for clara; caso contrário medium.",
 ].join(" ");
 
@@ -38,10 +38,10 @@ const classificationSchema = {
         type: "object",
         properties: {
           questionIndex: { type: "integer" },
-          responseType: { type: "string", enum: ["open", "multiple_choice", "mixed", "unknown"] },
+          isMultipleChoice: { type: "boolean" },
           confidence: { type: "string", enum: ["high", "medium"] },
         },
-        required: ["questionIndex", "responseType", "confidence"],
+        required: ["questionIndex", "isMultipleChoice", "confidence"],
       },
     },
   },
@@ -63,8 +63,8 @@ function parseClassifications(content: unknown, questionCount: number): Question
     if (!Number.isInteger(index) || Number(index) < 0 || Number(index) >= questionCount || seen.has(Number(index))) {
       throw new Error("Ollama retornou um índice de questão inválido ou repetido.");
     }
-    if (!["open", "multiple_choice", "mixed", "unknown"].includes(String(entry.responseType))) {
-      throw new Error("Ollama retornou um tipo de resposta inválido.");
+    if (typeof entry.isMultipleChoice !== "boolean") {
+      throw new Error("Ollama retornou uma classificação objetiva inválida.");
     }
     if (entry.confidence !== "high" && entry.confidence !== "medium") {
       throw new Error("Ollama retornou confiança inválida.");
@@ -72,7 +72,7 @@ function parseClassifications(content: unknown, questionCount: number): Question
     seen.add(Number(index));
     return {
       questionIndex: Number(index),
-      responseType: entry.responseType as QuestionClassification["responseType"],
+      isMultipleChoice: entry.isMultipleChoice,
       confidence: entry.confidence,
     };
   });

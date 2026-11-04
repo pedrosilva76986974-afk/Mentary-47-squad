@@ -8,7 +8,6 @@ const questionBase: ParsedQuestion = {
   number: 3,
   text: "03. Sobre hardware? A texto ruidoso B fragmento de outra questão",
   prompt: "Sobre hardware?",
-  answer: null,
   responseType: "multiple_choice",
   alternatives: [
     { label: "A", text: "Software de sistemas." },
