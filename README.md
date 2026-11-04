@@ -8,7 +8,24 @@ Extrator de Questões e Módulo de Inteligência Avaliativa.
 - Conexão com a internet durante a instalação das dependências. No primeiro uso do OCR, o Tesseract.js também pode precisar baixar os dados do idioma português.
 - Windows, macOS ou Linux.
 
-O projeto inclui uma interface em React com TypeScript e Vite e um backend em Node.js com TypeScript. A integração com banco de dados ainda não está configurada; não é necessário configurar um banco para iniciar o projeto.
+O projeto inclui uma interface em React com TypeScript e Vite, um backend em Node.js com TypeScript e armazenamento de questões no PostgreSQL. O Docker Compose inicia o banco; a API continua sendo executada localmente durante o desenvolvimento.
+
+## Iniciar o PostgreSQL com Docker
+
+Instale e abra o Docker Desktop. Na primeira configuração, copie o arquivo de ambiente de exemplo e inicie o banco a partir da pasta raiz do projeto:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d
+```
+
+O banco usa um volume Docker chamado `mentary-postgres-data`, então os dados continuam salvos depois de parar o container. A senha do `.env.example` serve para desenvolvimento local; troque-a antes de usar o banco em uma máquina compartilhada.
+
+Na primeira inicialização da API, o Mentary aplica as migrações de `database/migrations`. Os dados de revisão ficam no schema `extrator`: `review_documents` guarda o documento e o texto extraído, `review_questions` mantém enunciado, gabarito, status e metadados pedagógicos, e `question_alternatives` guarda as alternativas ordenadas e relacionadas à questão. Revisões antigas em `src/backend/uploads/reviews` são importadas sem substituir registros já existentes no banco.
+
+A migração `003_extrator_schema_and_mentary_export.sql` mantém as tabelas de revisão separadas do formato de destino da Mentary e cria a view `extrator.approved_question_exports`. Ela projeta questões aprovadas para os campos descritos no README de referência do Banco de Questões e informa `is_ready_for_mentary` quando todos os campos obrigatórios, incluindo BNCC, descritor SAEB, dificuldade e os UUIDs do autor e da instituição, estão preenchidos. Os UUIDs de destino podem ser informados em `pedagogy.userId` e `pedagogy.institutionId` ao atualizar a questão pela rota de revisão. A view é somente leitura: a aplicação ainda não publica automaticamente questões em `public.questions`. Essa tabela de referência não é alterada pelas migrações do Extrator.
+
+Para parar somente o container, mantendo os dados, use `docker compose down`.
 
 ## Instalar as dependências
 
@@ -66,7 +83,7 @@ O sistema confere extensão, tipo informado e conteúdo real do arquivo antes de
 
 As questões ficam disponíveis na tela de revisão logo após o envio. Também podem ser consultadas pela rota `GET /documents/{id}/review`, usando o `id` retornado pelo upload. A revisão permite editar enunciados e alternativas, registrar gabaritos e salvar o status de cada questão (`pending_review`, `approved` ou `rejected`) pela rota `PATCH /documents/{id}/review/questions/{questionId}`. Questões de múltipla escolha precisam de gabarito antes de serem aprovadas. A tela pode ser reaberta pelo link de revisão compartilhável. Se nenhum enunciado for identificado, o sistema informa isso, salva um resultado sem questões e disponibiliza o texto extraído para conferência. Se a extração falhar ou não produzir texto legível, a operação retorna erro e não cria um resultado de revisão.
 
-Os registros de origem ficam em `src/backend/uploads/manifest.json`, com nome do arquivo, tipo, tamanho, data e hash SHA-256. Os arquivos originais ficam em `src/backend/uploads/documents` e podem ser consultados durante a revisão pela rota `GET /documents/{id}/source`; PDFs abrem na página da questão e imagens são exibidas no cartão correspondente. Os resultados de revisão — incluindo texto extraído, questões e alterações feitas pelo revisor — ficam em arquivos JSON dentro de `src/backend/uploads/reviews`. Esses dados ainda não usam banco de dados. Por padrão, documentos, registros e revisões com mais de 30 dias são removidos na inicialização e depois diariamente. Configure `MENTARY_RETENTION_DAYS` para outro prazo em dias ou use `0` para desativar a limpeza automática.
+Os dados das revisões — texto extraído, questões, alternativas e alterações feitas pelo revisor — ficam no PostgreSQL. Os metadados de origem continuam em `src/backend/uploads/manifest.json` e os arquivos originais ficam em `src/backend/uploads/documents`; eles podem ser consultados pela rota `GET /documents/{id}/source`. O PostgreSQL e os arquivos precisam estar disponíveis para restaurar uma revisão completa. Por padrão, documentos e revisões com mais de 30 dias são removidos na inicialização e depois diariamente. Configure `MENTARY_RETENTION_DAYS` para outro prazo em dias ou use `0` para desativar a limpeza automática.
 
 ## Identificação de questões com Ollama (opcional)
 

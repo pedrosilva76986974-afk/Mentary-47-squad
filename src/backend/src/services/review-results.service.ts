@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { DocumentOrigin } from "./document-origin.service.js";
 import type { ExtractionResult, VisualPageReference } from "./document-extraction.service.js";
@@ -6,6 +6,13 @@ import type { ParsedQuestion } from "./question-parser.service.js";
 import { DocumentProcessingError } from "./document-processing-error.js";
 import { DocumentValidationError } from "./document-validation.service.js";
 import type { IdentificationDiagnostics } from "./question-identification.service.js";
+import { initializeDatabase, isDatabaseConfigured } from "./database.service.js";
+import {
+  deleteReviewResultFromDatabase,
+  getReviewResultFromDatabase,
+  importLegacyReviewResult,
+  saveReviewResultToDatabase,
+} from "./postgres-review.service.js";
 
 type ReviewQuestion = ParsedQuestion & {
   id: string;
@@ -18,6 +25,8 @@ type ReviewQuestion = ParsedQuestion & {
     bnccSkills?: string[];
     descriptor?: string;
     difficulty?: "easy" | "medium" | "hard" | "unknown";
+    userId?: string;
+    institutionId?: string;
   };
   reviewedBy?: string | null;
   visualReferences?: VisualPageReference[];
@@ -110,6 +119,12 @@ async function saveReviewResult(
     questions,
   };
 
+  if (isDatabaseConfigured()) {
+    await initializeDatabase();
+    await saveReviewResultToDatabase(result);
+    return result;
+  }
+
   const directory = reviewDirectory();
   await mkdir(directory, { recursive: true });
   const path = resolve(directory, `${origin.id}.json`);
@@ -121,9 +136,16 @@ async function saveReviewResult(
 
 async function getReviewResult(documentId: string): Promise<ReviewResult | undefined> {
   if (!/^[\da-f-]{36}$/i.test(documentId)) return undefined;
+  if (isDatabaseConfigured()) {
+    await initializeDatabase();
+    const storedReview = await getReviewResultFromDatabase(documentId);
+    if (storedReview) return normalizeReviewResult(storedReview);
+  }
   try {
     const content = await readFile(resolve(reviewDirectory(), `${documentId}.json`), "utf8");
-    return normalizeReviewResult(JSON.parse(content) as ReviewResult);
+    const review = normalizeReviewResult(JSON.parse(content) as ReviewResult);
+    if (isDatabaseConfigured()) await importLegacyReviewResult(review);
+    return review;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
     throw error;
@@ -197,6 +219,15 @@ async function updateReviewQuestion(
         if (typeof value !== "string" || value.length > 250) throw new DocumentValidationError(`O campo pedagógico ${field} deve ter até 250 caracteres.`);
         pedagogy[field] = value.trim() || undefined;
       }
+    for (const field of ["userId", "institutionId"] as const) {
+      if (field in changes) {
+        const value = changes[field];
+        if (typeof value !== "string" || !/^[\da-f]{8}-[\da-f]{4}-[1-8][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i.test(value.trim())) {
+          throw new DocumentValidationError(`O campo pedagógico ${field} deve ser um UUID válido.`);
+        }
+        pedagogy[field] = value.trim();
+      }
+    }
     }
     if ("bnccSkills" in changes) {
       const value = changes.bnccSkills;
@@ -225,12 +256,42 @@ async function updateReviewQuestion(
   question.missingComponents = [...missingComponents];
 
   review.questions[questionIndex] = question;
-  const filePath = resolve(reviewDirectory(), `${documentId}.json`);
-  const temporaryPath = `${filePath}.tmp`;
-  await writeFile(temporaryPath, `${JSON.stringify(review, null, 2)}\n`, "utf8");
-  await rename(temporaryPath, filePath);
+  if (isDatabaseConfigured()) {
+    await saveReviewResultToDatabase(review);
+  } else {
+    const filePath = resolve(reviewDirectory(), `${documentId}.json`);
+    const temporaryPath = `${filePath}.tmp`;
+    await writeFile(temporaryPath, `${JSON.stringify(review, null, 2)}\n`, "utf8");
+    await rename(temporaryPath, filePath);
+  }
   return review;
 }
 
-export { findQuestionVisualReferences, getReviewResult, saveReviewResult, updateReviewQuestion };
+async function migrateLegacyReviewFiles(): Promise<number> {
+  if (!isDatabaseConfigured()) return 0;
+  await initializeDatabase();
+  let fileNames: string[];
+  try {
+    fileNames = await readdir(reviewDirectory());
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return 0;
+    throw error;
+  }
+  let importedCount = 0;
+  for (const fileName of fileNames.filter((name) => /^[\da-f-]{36}\.json$/i.test(name))) {
+    const content = await readFile(resolve(reviewDirectory(), fileName), "utf8");
+    const review = normalizeReviewResult(JSON.parse(content) as ReviewResult);
+    if (await importLegacyReviewResult(review)) importedCount += 1;
+  }
+  return importedCount;
+}
+
+async function removeReviewResult(documentId: string): Promise<void> {
+  if (isDatabaseConfigured()) {
+    await deleteReviewResultFromDatabase(documentId);
+  }
+  await rm(resolve(reviewDirectory(), `${documentId}.json`), { force: true });
+}
+
+export { findQuestionVisualReferences, getReviewResult, migrateLegacyReviewFiles, removeReviewResult, saveReviewResult, updateReviewQuestion };
 export type { ReviewQuestion, ReviewQuestionUpdate, ReviewResult };

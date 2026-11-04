@@ -109,7 +109,11 @@ test("PATCH review question saves edits, answer key, and review status", async (
       prompt: "Quanto é 2 + 2? (revisto)",
       alternatives: [{ label: "A", text: "3" }, { label: "B", text: "4" }],
       answerKey: "B",
-      pedagogy: { discipline: "Matemática", grade: "8º ano", topic: "Adição", bnccSkills: ["EF08MA01"], descriptor: "D1", difficulty: "easy" },
+      pedagogy: {
+        discipline: "Matemática", grade: "8º ano", topic: "Adição", bnccSkills: ["EF08MA01"], descriptor: "D1", difficulty: "easy",
+        userId: "11111111-1111-4111-8111-111111111111",
+        institutionId: "22222222-2222-4222-8222-222222222222",
+      },
       status: "approved",
       reviewedBy: "Professora Ana",
     });
@@ -120,6 +124,7 @@ test("PATCH review question saves edits, answer key, and review status", async (
   assert.equal(update.body.questions[0].status, "approved");
   assert.equal(update.body.questions[0].reviewedBy, "Professora Ana");
   assert.deepEqual(update.body.questions[0].pedagogy.bnccSkills, ["EF08MA01"]);
+  assert.equal(update.body.questions[0].pedagogy.userId, "11111111-1111-4111-8111-111111111111");
 
   const persisted = await request(app).get(upload.body.reviewUrl);
   assert.equal(persisted.body.questions[0].alternatives[1].text, "4");
@@ -143,6 +148,23 @@ test("PATCH review question rejects approval of multiple choice without an answe
 
   assert.equal(update.status, 400);
   assert.match(update.body.error, /Defina o gabarito/);
+});
+
+test("review rejects malformed destination ownership UUIDs", async () => {
+  const upload = await request(app)
+    .post("/documents")
+    .attach("document", await createPdf("Questão 1: Quanto é 2 + 2? A) 3 B) 4"), {
+      filename: "invalid-owner-id.pdf",
+      contentType: "application/pdf",
+    });
+  const question = upload.body.questions[0] as { id: string };
+
+  const update = await request(app)
+    .patch(`/documents/${upload.body.origin.id}/review/questions/${question.id}`)
+    .send({ pedagogy: { userId: "not-a-uuid" } });
+
+  assert.equal(update.status, 400);
+  assert.match(update.body.error, /UUID válido/);
 });
 
 test("review requires a reviewer and a valid alternative before approval, and can reopen the question", async () => {
