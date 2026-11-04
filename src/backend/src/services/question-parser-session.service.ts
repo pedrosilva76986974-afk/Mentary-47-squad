@@ -11,6 +11,7 @@ import {
 const questionIntent = /\?|\b(assinale|marque|indique|explique|calcule|resolva|resolve|complete|identifique|responda|observe|leia|considere|analise|determine|escreva|cite|compare|descreva|classifique|escolha|implemente|implementar|desenvolva|construa|crie|projete|elabore|desenhe|faca|faça|qual|quais|quem|onde|quando|como|por que|o que|quanto|quantos|então|soma|seria de)\b/i;
 const directQuestionStart = /^(qual|quais|quem|onde|quando|como|por que|o que|quanto|quantos)\b/i;
 const supplementaryListHeader = /^\s*(observa(?:ções|coes)|instru(?:ções|coes)|orienta(?:ções|coes)|recomenda(?:ções|coes)|notas)\s*:?$/i;
+const questionSupportHeader = /^\s*(?:texto(?:\s+de\s+apoio)?|texto-base)\s+(?:para|da)\s+(?:a\s+)?quest(?:ão|ao)\s*(?:n[º°o.]?\s*)?(\d{1,3})\s*:?\s*$/i;
 
 function normalizeSequentialNumber(candidate: number, previous: number | null | undefined): number {
   if (previous !== null && previous !== undefined && candidate >= 100 && candidate % 100 === previous + 1) {
@@ -30,6 +31,15 @@ class QuestionParsingSession {
       this.finishActive();
       this.insideAdministrativeInstructions = true;
       this.insideSupplementaryList = false;
+      return;
+    }
+
+    const supportHeader = line.match(questionSupportHeader);
+    if (supportHeader) {
+      this.finishActive();
+      this.insideAdministrativeInstructions = false;
+      this.insideSupplementaryList = false;
+      this.active = createQuestionDraft(Number(supportHeader[1]), line, page, false, true);
       return;
     }
 

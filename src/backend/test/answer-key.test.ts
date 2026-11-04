@@ -7,7 +7,6 @@ const question: ParsedQuestion = {
   number: 3,
   text: "Sobre hardware?",
   prompt: "Sobre hardware?",
-  answer: null,
   responseType: "multiple_choice",
   alternatives: [
     { label: "A", text: "Software de sistemas." },
@@ -24,7 +23,6 @@ test("answer key associates a numbered printed choice with its question", () => 
   const [result] = applyPrintedAnswerKey([question], ["GABARITO\n3-B"]);
 
   assert.equal(result?.answerKey, "B");
-  assert.equal(result?.answer, null);
   assert.deepEqual(result?.missingComponents, []);
 });
 
@@ -71,4 +69,15 @@ test("answer key pairs question-number rows with answer-letter rows", () => {
   assert.equal(first?.answerKey, "A");
   assert.equal(second?.answerKey, "C");
   assert.equal(third?.answerKey, "B");
+});
+
+test("answer key reads compact Q-number entries from a generated worksheet", () => {
+  const [first, second, ninth] = applyPrintedAnswerKey(
+    [{ ...question, number: 1 }, { ...question, number: 2 }, { ...question, number: 9 }],
+    ["GABARITO OFICIAL DE REFERÊNCIA: Q01: C Q02: B Q09: A"],
+  );
+
+  assert.equal(first?.answerKey, "C");
+  assert.equal(second?.answerKey, "B");
+  assert.equal(ninth?.answerKey, "A");
 });
