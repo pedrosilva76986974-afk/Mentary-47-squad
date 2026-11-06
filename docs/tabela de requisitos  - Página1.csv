@@ -1,0 +1,41 @@
+Tabela de Requisitos,
+ID,Requisito Funcional
+RF01,"O sistema deve permitir o upload de documentos educacionais, como PDF, imagens e arquivos estruturados."
+RF02,O sistema deve processar o documento enviado e identificar questões presentes no material.
+RF03,"O sistema deve identificar o enunciado, alternativas e, quando disponível, o gabarito da questão."
+RF04,"O sistema deve identificar e preservar imagens, gráficos, tabelas e figuras presentes nas questões."
+RF05,"O sistema deve registrar a origem da questão, incluindo documento e página de origem."
+RF06,O sistema deve apresentar as questões extraídas em uma interface de revisão.
+RF07,O usuário autorizado deve poder editar enunciados e alternativas.
+RF08,O usuário autorizado deve poder definir ou corrigir o gabarito.
+RF09,"O usuário deve poder associar a questão ao componente curricular, ano escolar, habilidade da BNCC, descritor e nível de dificuldade."
+RF10,"O sistema deve permitir aprovar, rejeitar ou manter uma questão em revisão."
+RF11,O sistema deve enviar questões aprovadas para o Banco de Questões da Mentary.
+RF12,O sistema deve permitir consultar e selecionar as questões extraídas no Construtor de Simulados.
+RF13,O sistema deve receber os dados das aplicações dos simulados.
+RF14,"O sistema deve processar as respostas dos estudantes e calcular acertos, erros e questões não respondidas."
+RF15,"O sistema deve calcular o desempenho por estudante, turma, escola, questão, habilidade e descritor."
+RF16,O sistema deve apresentar dashboards de desempenho de acordo com o perfil do usuário.
+RF17,O sistema deve gerar relatórios por descritores e habilidades.
+RF18,O sistema deve permitir comparar resultados entre diferentes turmas e aplicações.
+RF19,O sistema deve identificar lacunas de aprendizagem com base nos resultados das avaliações.
+RF20,"O sistema deve realizar uma análise básica da qualidade das questões, identificando comportamentos como índices muito altos ou baixos de acerto."
+RF21,O sistema deve permitir a geração de sugestões de atividades e planos de recomposição apoiados por IA.
+RF22,O sistema deve permitir que o professor ou equipe pedagógica revise e aprove as recomendações geradas pela IA.
+ID,Requisito Não Funcional
+RNF01,"O sistema deve possuir uma interface responsiva, permitindo utilização em diferentes tamanhos de tela."
+RNF02,O sistema deve possuir uma interface compatível com a identidade visual da Mentary.
+RNF03,O sistema deve utilizar controle de acesso por perfil de usuário.
+RNF04,O sistema deve possuir mecanismos de autenticação e autorização adequados aos usuários da plataforma.
+RNF05,O sistema deve registrar logs e erros para facilitar o acompanhamento e manutenção da aplicação.
+RNF06,As APIs do sistema devem ser desenvolvidas seguindo padrões REST.
+RNF07,As APIs devem possuir documentação utilizando Swagger/OpenAPI.
+RNF08,"O sistema deve utilizar PostgreSQL como banco de dados e Prisma ORM, conforme a stack proposta."
+RNF09,O sistema deve utilizar React e TypeScript no front-end.
+RNF10,O back-end deve utilizar Node.js e TypeScript.
+RNF11,"O código deve possuir testes das principais regras de negócio, APIs e fluxos prioritários."
+RNF12,O projeto deve utilizar Git e GitHub para versionamento do código.
+RNF13,O sistema deve utilizar Docker para facilitar a padronização do ambiente.
+RNF14,"O sistema deve preservar a rastreabilidade das questões, mantendo informações sobre origem, extração, aprovação e alterações."
+RNF15,O sistema deve evitar o envio duplicado de uma mesma questão para o Banco de Questões.
+RNF16,O sistema deve utilizar dados fictícios ou anonimizados durante testes e validação do MVP.
