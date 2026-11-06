@@ -94,6 +94,20 @@ test("Ollama removes a high-confidence non-objective false positive", async () =
   }
 });
 
+test("Ollama cannot discard an incomplete numbered candidate", async () => {
+  const previous = readEnvironment();
+  setOllamaEnvironment();
+  globalThis.fetch = async () => classificationResponse([{ questionIndex: 0, isMultipleChoice: false, confidence: "high" }]);
+  try {
+    const result = await identifyQuestionsDetailed(["Questão 1: Qual é a capital do Brasil?"]);
+    assert.equal(result.questions.length, 1);
+    assert.ok(result.questions[0]!.missingComponents!.includes("alternatives"));
+    assert.equal(result.diagnostics.method, "ollama+rules");
+  } finally {
+    restoreEnvironment(previous);
+  }
+});
+
 test("falls back to local objective-question detection when Ollama is unavailable", async () => {
   const previous = readEnvironment();
   const originalError = console.error;

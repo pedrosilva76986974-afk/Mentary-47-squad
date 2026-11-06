@@ -32,6 +32,9 @@ function applyClassifications(
   const classifiedQuestions = questions.flatMap((question, index) => {
     const classification = byIndex.get(index);
     if (!classification || classification.confidence !== "high") return [question];
+    // Missing choices are an extraction uncertainty for the reviewer. A model
+    // classification must not silently remove the only recovered content.
+    if (!classification.isMultipleChoice && (question.alternatives?.length ?? 0) < 2) return [question];
     appliedCount += 1;
     if (!classification.isMultipleChoice) return [];
     // Ollama only classifies; OCR text, prompt and alternatives stay from local code.

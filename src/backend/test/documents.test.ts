@@ -209,6 +209,32 @@ test("review requires a reviewer and a valid alternative before approval, and ca
   assert.equal(reopened.body.questions[0].status, "pending_review");
 });
 
+test("approved questions cannot lose required fields through a partial update", async () => {
+  const upload = await request(app).post("/documents")
+    .attach("document", await createPdf("Questão 1: Quanto é 2 + 2? A) 3 B) 4"), {
+      filename: "approval-integrity.pdf", contentType: "application/pdf",
+    });
+  assert.equal(upload.status, 200);
+  const url = `${upload.body.reviewUrl}/questions/${upload.body.questions[0].id}`;
+  const approved = await request(app).patch(url).send({ answerKey: "B", reviewedBy: "Revisor de teste", status: "approved" });
+  assert.equal(approved.status, 200);
+  for (const update of [
+    { answerKey: null }, { answerKey: "Z" }, { reviewedBy: null }, { prompt: " " },
+    { alternatives: [] },
+    { alternatives: [{ label: "A", text: "3" }, { label: "B", text: " " }] },
+    { alternatives: [{ label: "B", text: "3" }, { label: "b", text: "4" }] },
+  ]) {
+    const rejected = await request(app).patch(url).send(update);
+    assert.equal(rejected.status, 400, JSON.stringify(update));
+    const persisted = await request(app).get(upload.body.reviewUrl);
+    assert.deepEqual(persisted.body.questions[0], approved.body.questions[0]);
+  }
+  const reopened = await request(app).patch(url).send({ status: "pending_review", answerKey: null });
+  assert.equal(reopened.status, 200);
+  assert.equal(reopened.body.questions[0].status, "pending_review");
+  assert.ok(reopened.body.questions[0].missingComponents.includes("answer"));
+});
+
 test("POST /documents rejects unsupported file types", async () => {
   const originCount = JSON.parse(await readFile(registryPath, "utf8")).length as number;
   const response = await request(app)
@@ -293,6 +319,21 @@ test("keeps an objective question with unreadable alternatives flagged for manua
     .send({ answerKey: "A", reviewedBy: "Professora Ana", status: "approved" });
   assert.equal(approval.status, 400);
   assert.match(approval.body.error, /pelo menos duas alternativas/);
+});
+
+test("upload preserves numbered candidates with missing choices for later review", async () => {
+  const upload = await request(app).post("/documents")
+    .attach("document", await createPdf("Questão 1: Qual é a capital do Brasil?"), {
+      filename: "missing-choices.pdf", contentType: "application/pdf",
+    });
+  assert.equal(upload.status, 200);
+  assert.equal(upload.body.questionCount, 1);
+  const review = await request(app).get(upload.body.reviewUrl);
+  assert.equal(review.status, 200);
+  assert.match(review.body.questions[0].prompt, /capital do Brasil/);
+  assert.equal(review.body.questions[0].status, "pending_review");
+  assert.ok(review.body.questions[0].missingComponents.includes("alternatives"));
+  assert.ok(review.body.questions[0].missingComponents.includes("answer"));
 });
 
 test("document validation accepts real PNG and JPEG images", async () => {

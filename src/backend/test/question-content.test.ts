@@ -33,6 +33,16 @@ test("keeps multiple-choice questions even when they also request a justificatio
   assert.equal(question.alternatives?.length, 2);
 });
 
+test("retains numbered questions when OCR loses choices without an explicit selection instruction", async () => {
+  const questions = await identifyQuestions([
+    "Questão 1: Qual é a capital do Brasil?\nQuestão 2: Explique a importância da água.",
+  ]);
+  assert.deepEqual(questions.map((question) => question.number), [1]);
+  assert.match(questions[0]!.prompt!, /capital do Brasil/);
+  assert.ok(questions[0]!.missingComponents!.includes("alternatives"));
+  assert.ok(questions[0]!.missingComponents!.includes("answer"));
+});
+
 test.after(() => {
   if (previousIdentifier === undefined) delete process.env.QUESTION_IDENTIFIER;
   else process.env.QUESTION_IDENTIFIER = previousIdentifier;

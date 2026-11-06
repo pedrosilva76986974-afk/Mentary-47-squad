@@ -190,22 +190,30 @@ async function updateReviewQuestion(
   }
   if ("status" in update) {
     if (!["pending_review", "approved", "rejected"].includes(String(update.status))) throw new DocumentValidationError("Status de revisão inválido.");
-    if (update.status === "approved") {
-      if (!question.alternatives || question.alternatives.length < 2) {
-        throw new DocumentValidationError("Uma questão objetiva precisa ter pelo menos duas alternativas antes de ser aprovada.");
-      }
-      if (!question.answerKey?.trim()) {
-        throw new DocumentValidationError("Defina o gabarito antes de aprovar uma questão de múltipla escolha.");
-      }
-      const answerKey = question.answerKey.trim().toLocaleUpperCase("pt-BR");
-      if (!question.alternatives?.some((alternative) => alternative.label.trim().toLocaleUpperCase("pt-BR") === answerKey)) {
-        throw new DocumentValidationError("O gabarito deve corresponder a uma alternativa existente.");
-      }
-    }
-    if (update.status === "approved" && !question.reviewedBy?.trim()) {
-      throw new DocumentValidationError("Informe o responsável pela revisão antes de aprovar a questão.");
-    }
     question.status = update.status!;
+  }
+  if (question.status === "approved") {
+    if (!question.prompt?.trim()) {
+      throw new DocumentValidationError("Defina o enunciado antes de aprovar a questão.");
+    }
+    if (!question.alternatives || question.alternatives.length < 2) {
+      throw new DocumentValidationError("Uma questão objetiva precisa ter pelo menos duas alternativas antes de ser aprovada.");
+    }
+    const labels = question.alternatives.map((alternative) => alternative.label.trim().toLocaleUpperCase("pt-BR"));
+    if (question.alternatives.some((alternative) => !alternative.label.trim() || !alternative.text.trim())
+      || new Set(labels).size !== labels.length) {
+      throw new DocumentValidationError("Preencha as alternativas e use rótulos únicos antes de aprovar a questão.");
+    }
+    if (!question.answerKey?.trim()) {
+      throw new DocumentValidationError("Defina o gabarito antes de aprovar uma questão de múltipla escolha.");
+    }
+    const answerKey = question.answerKey.trim().toLocaleUpperCase("pt-BR");
+    if (!question.alternatives?.some((alternative) => alternative.label.trim().toLocaleUpperCase("pt-BR") === answerKey)) {
+      throw new DocumentValidationError("O gabarito deve corresponder a uma alternativa existente.");
+    }
+  }
+  if (question.status === "approved" && !question.reviewedBy?.trim()) {
+    throw new DocumentValidationError("Informe o responsável pela revisão antes de aprovar a questão.");
   }
   if ("pedagogy" in update) {
     if (!update.pedagogy || typeof update.pedagogy !== "object" || Array.isArray(update.pedagogy)) {
@@ -219,6 +227,7 @@ async function updateReviewQuestion(
         if (typeof value !== "string" || value.length > 250) throw new DocumentValidationError(`O campo pedagógico ${field} deve ter até 250 caracteres.`);
         pedagogy[field] = value.trim() || undefined;
       }
+    }
     for (const field of ["userId", "institutionId"] as const) {
       if (field in changes) {
         const value = changes[field];
@@ -227,7 +236,6 @@ async function updateReviewQuestion(
         }
         pedagogy[field] = value.trim();
       }
-    }
     }
     if ("bnccSkills" in changes) {
       const value = changes.bnccSkills;

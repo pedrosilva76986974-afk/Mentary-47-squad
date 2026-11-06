@@ -29,7 +29,11 @@ function isObjectiveQuestion(question: ParsedQuestion): boolean {
   const explicitlyObjective = /\b(?:assinale|marque|escolha|selecione|indique)\b.{0,80}\b(?:alternativa|opção|opcao|correta|incorreta)|\b(?:alternativa|opção|opcao)\s+(?:correta|incorreta)\b/i.test(prompt);
   const exerciseList = /\b(?:resolva|resolver|calcule|calcular)\s+(?:(?:as|os|cada|a|o)\s+)?(?:(?:seguintes|abaixo|propostas)\s+)?(?:equações?|questões?|itens?)\b|\bdetermine\s+(?:o valor|a raiz)\b.*\bequação\b/i.test(prompt)
     && !explicitlyObjective;
-  return !exerciseList && (explicitlyObjective || (question.alternatives?.length ?? 0) >= 2);
+  const explicitlyDiscursive = /^\s*(?:explique|descreva|discorra|disserte|redija|escreva|justifique|demonstre|prove)\b/i.test(prompt);
+  // A numbered candidate with damaged choices cannot safely be classified as
+  // discursive just because OCR did not recover its alternatives.
+  const incompleteCandidate = question.number !== null && !explicitlyDiscursive;
+  return !exerciseList && (explicitlyObjective || (question.alternatives?.length ?? 0) >= 2 || incompleteCandidate);
 }
 
 export { isObjectiveQuestion, structureQuestion };
