@@ -1,5 +1,13 @@
 # Ciclos de desenvolvimento — 04/11/2026
 
+## Recuperar análise com BNCC malformada — 06/11/2026
+
+O PDF de erro mostrou `Sugestão pedagógica inválida`. A falha foi reproduzida com Qwen 3.5 4B no documento de 13 questões: o modelo retornou descrições no array de códigos e exemplos incompletos como EM13MAT02. A validação anterior rejeitava o lote inteiro, inclusive suas classificações não BNCC.
+
+Agora códigos completos podem ser extraídos de descrições; códigos incompletos são descartados com aviso, sem inventar dígitos ou perder área, disciplina e tipo. Não há validação de existência em catálogo oficial. A validação estrutural de índices e duplicatas continua obrigatória.
+
+Cada lote concluído é persistido e mostrado na tela durante o processamento. Nova execução real no mesmo documento terminou com 13 sugestões, com progresso observado em 5 e 10 itens. Seis testes direcionados passaram, ambos os builds passaram. Os metadados confirmados não são preenchidos automaticamente: as sugestões surgem automaticamente para conferência e cópia explícita dos campos vazios.
+
 ## Questão 5 com alternativas numéricas — 06/11/2026
 
 O relato em PDF foi comparado com o arquivo original `Lista de Questoes para Teste de OCR (1).pdf`. A questão 5 tinha alternativas `1.` a `5.` com pares de raízes, não reconhecidas pelo extrator de alternativas. Foi acrescentado reconhecimento conservador de sequências numéricas pontuadas com respostas numéricas/equações e leitura de gabaritos explícitos como `Q05: 1`, preservando os rótulos originais.

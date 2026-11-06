@@ -61,7 +61,7 @@ type UploadResult = {
 };
 
 type Feedback = { message: string; kind: "success" | "warning" | "error" };
-type PedagogicalJob = { status: "queued" | "running" | "completed" | "failed"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; bnccSkills: string[]; rationale: string; confidence: string }> };
+type PedagogicalJob = { status: "queued" | "running" | "completed" | "failed"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; bnccSkills: string[]; rationale: string; confidence: string; warnings?: string[] }> };
 
 /** Checks the file's extension, browser MIME type, size, and real file signature before upload. */
 async function validateFile(file: File): Promise<void> {
@@ -334,16 +334,17 @@ function App() {
                 <p className="card-kicker">ETAPA DE REVISÃO</p>
                 <h2 id="review-title">Questões identificadas</h2>
                 <div role="status" aria-live="polite">
-                  <p>Análise pedagógica: {classification?.status === "completed" ? "concluída — sugestões da IA para conferência" : classification?.status === "failed" ? classification.error : "em andamento; você já pode revisar as questões"}</p>
+                  <p>Análise pedagógica: {classification?.status === "completed" ? "concluída — sugestões da IA para conferência" : classification?.status === "failed" ? classification.error : `em andamento (${classification?.suggestions.length ?? 0} classificadas); você já pode revisar as questões`}</p>
                   <p>BNCC sugerida pela IA, sem validação em catálogo oficial. Confira a habilidade, a etapa e a pertinência antes de registrá-la.</p>
                   {classification?.stale && <p>O conteúdo foi alterado após a análise. Solicite uma nova análise.</p>}
                   <button type="button" disabled={classification?.status === "running" || classification?.status === "queued"} onClick={() => setAnalysisAttempt(n => n + 1)}>Analisar novamente</button>
-                  {classification?.status === "completed" && classification.suggestions.map(s => (
+                  {classification && classification.suggestions.length > 0 && classification.suggestions.map(s => (
                     <div key={s.questionId}>
                       <strong>Questão {result.questions.find(q => q.id === s.questionId)?.number ?? result.questions.findIndex(q => q.id === s.questionId) + 1}: {s.area || "Área indeterminada"}</strong>
                       <p>{s.discipline} · {s.questionType} · Confiança informada pela IA: {s.confidence}</p>
                       <p>BNCC sugerida: {s.bnccSkills.join(", ") || "Não identificada com segurança"}</p>
                       <p>{s.rationale}</p>
+                      {s.warnings?.map(w => <p key={w} role="note">{w}</p>)}
                       <button type="button" disabled={classification.stale || s.confidence === "low"} onClick={() => {
                         const question = result.questions.find(q => q.id === s.questionId);
                         if (!question) return;

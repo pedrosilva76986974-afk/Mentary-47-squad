@@ -2,6 +2,7 @@ import type { ParsedQuestion } from "./question-parser.service.js";
 export type PedagogicalSuggestion = {
   questionIndex: number; area: string; discipline: string; questionType: string;
   bnccSkills: string[]; rationale: string; confidence: "high" | "medium" | "low";
+  warnings?: string[];
 };
 const fields = { questionIndex: { type: "integer" }, area: { type: "string" }, discipline: { type: "string" }, questionType: { type: "string", enum: ["Múltipla escolha", "Associação", "Lacunas", "Interpretação de gráficos e tabelas", "Indeterminado"] }, bnccSkills: { type: "array", items: { type: "string" } }, rationale: { type: "string" }, confidence: { type: "string", enum: ["high", "medium", "low"] } };
 export async function classifyPedagogy(questions: Array<ParsedQuestion & { pedagogy?: { grade?: string; discipline?: string } }>): Promise<PedagogicalSuggestion[]> {
@@ -25,9 +26,15 @@ export async function classifyPedagogy(questions: Array<ParsedQuestion & { pedag
     if (!s || !Number.isInteger(s.questionIndex) || s.questionIndex < 0 || s.questionIndex >= questions.length || seen.has(s.questionIndex)
       || !["high", "medium", "low"].includes(s.confidence) || !fields.questionType.enum.includes(s.questionType)
       || [s.area, s.discipline, s.rationale].some(v => typeof v !== "string" || v.length > 2000)
-      || !Array.isArray(s.bnccSkills) || s.bnccSkills.length > 20
-      || s.bnccSkills.some(c => typeof c !== "string" || !/^(?:EF\d{2}[A-Z]{2}\d{2}|EM\d{2}[A-Z]{2,3}\d{2,3}|EI\d{2}[A-Z]{2}\d{2})$/.test(c))) throw new Error("Sugestão pedagógica inválida.");
+      || !Array.isArray(s.bnccSkills) || s.bnccSkills.length > 20) throw new Error("Sugestão pedagógica inválida.");
     seen.add(s.questionIndex);
-    return { questionIndex: s.questionIndex, area: s.area, discipline: s.discipline, questionType: s.questionType, bnccSkills: [...new Set(s.bnccSkills)], rationale: s.rationale, confidence: s.confidence };
+    const warnings: string[] = [];
+    const bnccSkills = s.bnccSkills.flatMap(value => {
+      // Accept a code wrapped in a description, but never repair/invent digits.
+      const code = typeof value === "string" ? value.toUpperCase().match(/\b(?:EF\d{2}[A-Z]{2}\d{2}|EM\d{2}(?:MAT|LGG|CNT|CHS)\d{3}|EM\d{2}(?:LP|CO)\d{2}|EI\d{2}[A-Z]{2}\d{2})\b/)?.[0] : undefined;
+      if (!code) { warnings.push("A IA sugeriu uma habilidade BNCC com formato inválido; ela foi desconsiderada. Confira no documento oficial."); return []; }
+      return [code];
+    });
+    return { questionIndex: s.questionIndex, area: s.area, discipline: s.discipline, questionType: s.questionType, bnccSkills: [...new Set(bnccSkills)], rationale: s.rationale, confidence: s.confidence, ...(warnings.length ? { warnings: [...new Set(warnings)] } : {}) };
   });
 }

@@ -41,6 +41,8 @@ export async function startClassification(id: string): Promise<ClassificationJob
         const questions = review.questions.slice(offset, offset + 5);
         const suggestions = await classifyPedagogy(questions);
         job.suggestions.push(...suggestions.map(s => ({ ...s, questionIndex: s.questionIndex + offset, questionId: questions[s.questionIndex]!.id })));
+        job.updatedAt = new Date().toISOString();
+        await save(job);
       }
       job.status = "completed";
     } catch (e) { job.status = "failed"; job.error = e instanceof Error ? e.message : "Falha na análise pedagógica."; }

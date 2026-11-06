@@ -53,7 +53,7 @@ test("post-extraction pedagogical classification lifecycle", async t => {
     await t.test("flags changed content and records failures for retry", async () => {
       await request(app).patch(`/documents/${id}/review/questions/${id}-q1`).send({ prompt: "Quanto é 3 + 3?" });
       assert.equal((await request(app).get(url)).body.stale, true);
-      globalThis.fetch = async () => response({ suggestions: [{ ...suggestion, bnccSkills: ["INVENTED"] }] });
+      globalThis.fetch = async () => new Response("Unavailable", { status: 503 });
       await request(app).post(url);
       assert.equal((await done(url)).status, "failed");
       globalThis.fetch = async () => response({ suggestions: [suggestion] });
@@ -74,6 +74,14 @@ test("post-extraction pedagogical classification lifecycle", async t => {
       await assert.rejects(classifyPedagogy([...parsed.questions, ...parsed.questions]));
       assert.equal((await request(app).post("/documents/not-a-uuid/classification")).status, 400);
       assert.equal((await request(app).post(`/documents/${randomUUID()}/classification`)).status, 404);
+    });
+    await t.test("bad BNCC cannot discard valid area and question type", async () => {
+      globalThis.fetch = async () => response({ suggestions: [{ ...suggestion, bnccSkills: ["(EM13MAT02) Descrição inventada", "(EF01MA08) Descrição da habilidade"] }] });
+      const [result] = await classifyPedagogy(parsed.questions);
+      assert.equal(result!.area, "Matemática");
+      assert.equal(result!.questionType, "Múltipla escolha");
+      assert.deepEqual(result!.bnccSkills, ["EF01MA08"]);
+      assert.ok(result!.warnings?.length);
     });
   } finally {
     globalThis.fetch = fetch;
