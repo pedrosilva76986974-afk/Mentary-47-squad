@@ -1,4 +1,8 @@
 -- Return false for incomplete metadata and tolerate malformed legacy BNCC data.
+-- Earlier installations have the same view with a different column order.
+-- Recreate only this non-materialized projection; stored review tables remain intact.
+-- No CASCADE: dependent objects must not be removed implicitly.
+DROP VIEW IF EXISTS extrator.approved_question_exports;
 CREATE OR REPLACE VIEW extrator.approved_question_exports AS
 WITH alternatives AS (
   SELECT

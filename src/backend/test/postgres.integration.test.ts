@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { Client } from "pg";
 import { closeDatabase, getDatabasePool, initializeDatabase } from "../src/services/database.service.js";
@@ -24,6 +25,12 @@ test("real PostgreSQL migrations, round trip, rollback and export", {
     await initializeDatabase();
     const pool = getDatabasePool();
     assert.equal((await pool.query("SELECT * FROM schema_migrations")).rowCount, 4);
+    // Reproduce installations whose migration 003 predates the missing-fields column.
+    await pool.query("DROP VIEW extrator.approved_question_exports");
+    await pool.query(`CREATE VIEW extrator.approved_question_exports AS
+      SELECT question_id, document_id, position, '{}'::jsonb AS mentary_question,
+      false AS is_ready_for_mentary, missing_components FROM extrator.review_questions`);
+    await pool.query(await readFile("../../database/migrations/004_export_readiness.sql", "utf8"));
     const id = randomUUID();
     const review: ReviewResult = {
       documentId: id, status: "pending_review", message: "Test fixture", processedAt: new Date().toISOString(),

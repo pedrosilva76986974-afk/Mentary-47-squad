@@ -1,5 +1,9 @@
 # Ciclos de desenvolvimento — 04/11/2026
 
+## Correção de inicialização — 06/11/2026
+
+Foi reproduzido no banco existente o erro PostgreSQL 42P16 ao aplicar a migração 004: instalações antigas tinham a view com colunas em ordem diferente. A migração agora recria somente a view não materializada, sem CASCADE e sem remover dados das tabelas. O teste PostgreSQL isolado cobre também o formato legado. Após a correção, a migração aplicada no ambiente local permitiu iniciar a API e `/health` respondeu `{"status":"ok"}`. Endereços e comandos de execução permanecem os mesmos.
+
 ## Análise pedagógica posterior ao upload — 06/11/2026
 
 O Ollama foi retirado da identificação síncrona. PDF.js/OCR e parser local devolvem a revisão sem esperar pela IA. A interface inicia uma solicitação posterior via POST e consulta o estado via GET, sem bloquear a edição.
