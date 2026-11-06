@@ -59,9 +59,15 @@ function extractQuestionAlternatives(
       };
     });
   const sequentialMatches = findSequentialOptionRun(punctuationMatches);
+  // Numeric dotted choices must form a consecutive block and look like short
+  // answers; ordinary numbered instructions must remain part of the prompt.
+  const numeric = [...normalizedSource.matchAll(/(?:^|\n)[ \t]*(\d{1,2})\.[ \t]+([^\n]+)/g)];
+  const numericRun = numeric.length >= 3 && numeric[0]?.[1] === "1"
+    && numeric.every((m, i) => Number(m[1]) === i + 1 && /[=]|^\s*[-−+]?\d/.test(m[2] ?? ""))
+    ? numeric.map(m => ({ index: m.index ?? 0, end: (m.index ?? 0) + m[0].length - m[2]!.length, label: m[1]! })) : [];
   const matches = sequentialMatches.length >= 2
     ? sequentialMatches
-    : punctuationMatches.length === 2 ? punctuationMatches : findUnpunctuatedOptionRun(normalizedSource);
+    : numericRun.length ? numericRun : punctuationMatches.length === 2 ? punctuationMatches : findUnpunctuatedOptionRun(normalizedSource);
   const parsedAlternatives = matches.length >= 2 ? matches.map((match, index) => {
     const start = match.end;
     const end = matches[index + 1]?.index ?? normalizedSource.length;

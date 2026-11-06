@@ -1,5 +1,13 @@
 # Ciclos de desenvolvimento — 04/11/2026
 
+## Questão 5 com alternativas numéricas — 06/11/2026
+
+O relato em PDF foi comparado com o arquivo original `Lista de Questoes para Teste de OCR (1).pdf`. A questão 5 tinha alternativas `1.` a `5.` com pares de raízes, não reconhecidas pelo extrator de alternativas. Foi acrescentado reconhecimento conservador de sequências numéricas pontuadas com respostas numéricas/equações e leitura de gabaritos explícitos como `Q05: 1`, preservando os rótulos originais.
+
+Reprocessamento real: 13 questões mantidas; questão 5 com cinco alternativas e gabarito `1`. Teste de regressão inclui a questão seguinte e gabarito misto letra/número. Suíte: 89 testes passaram, zero falhas, um teste PostgreSQL optativo ignorado; build backend passou. Limite separado: expoentes e índices do PDF ainda podem perder sua posição no texto extraído; esta correção não reconstrói fórmulas nem resolve as questões.
+
+O ambiente local não tinha OLLAMA_MODEL; foi configurado `qwen3.5:4b` e o backend foi reiniciado com sucesso. O arquivo de ambiente local não é versionado.
+
 ## Respostas vazias da API — 06/11/2026
 
 Relato: `Response.json(): Unexpected end of JSON input`. As chamadas do frontend liam JSON diretamente, inclusive quando o corpo estava vazio. Foi acrescentado um leitor compartilhado que trata respostas vazias, HTML, JSON truncado e formato inesperado; preserva mensagens de validação enviadas pela API. Upload, consulta, salvamento e análise pedagógica usam o leitor.

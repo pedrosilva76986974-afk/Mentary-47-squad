@@ -43,6 +43,21 @@ test("retains numbered questions when OCR loses choices without an explicit sele
   assert.ok(questions[0]!.missingComponents!.includes("answer"));
 });
 
+test("numeric dotted choices and numeric answer key remain attached to question five", async () => {
+  const questions = await identifyQuestions([[
+    "Questão 05. Dadas as equações f(x) e g(x), determine os pontos onde as curvas se intersectam.",
+    "1. x1= 2 e x2= 5", "2. x1= 1 e x2= 6", "3. x1= −2 e x2= −5",
+    "4. x1= 3 e x2= 4", "5. x1= 0 e x2= 2",
+    "Questão 06. Assinale a alternativa correta sobre redes.", "A) TCP", "B) UDP",
+    "GABARITO", "Q05: 1 | Q06: B",
+  ].join("\n")]);
+  assert.deepEqual(questions.map(q => q.number), [5, 6]);
+  assert.deepEqual(questions[0]!.alternatives!.map(a => a.label), ["1", "2", "3", "4", "5"]);
+  assert.equal(questions[0]!.answerKey, "1");
+  assert.equal(questions[1]!.answerKey, "B");
+  assert.doesNotMatch(questions[0]!.prompt!, /x1=/);
+});
+
 test.after(() => {
   if (previousIdentifier === undefined) delete process.env.QUESTION_IDENTIFIER;
   else process.env.QUESTION_IDENTIFIER = previousIdentifier;
