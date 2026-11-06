@@ -1,5 +1,11 @@
 # Ciclos de desenvolvimento — 04/11/2026
 
+## Respostas vazias da API — 06/11/2026
+
+Relato: `Response.json(): Unexpected end of JSON input`. As chamadas do frontend liam JSON diretamente, inclusive quando o corpo estava vazio. Foi acrescentado um leitor compartilhado que trata respostas vazias, HTML, JSON truncado e formato inesperado; preserva mensagens de validação enviadas pela API. Upload, consulta, salvamento e análise pedagógica usam o leitor.
+
+Validação: dois testes de regressão passaram e o build/typecheck do frontend passou. Na inspeção ao vivo, `/health` respondeu 200 com JSON, e uma consulta inexistente pelo proxy de 5173 respondeu 404 com JSON. A falha transitória original não foi reproduzida; não foi atribuída uma causa de rede sem evidência. O tratamento evita a exceção de JSON, mas indisponibilidade da API ainda exige restabelecer o backend.
+
 ## Correção de inicialização — 06/11/2026
 
 Foi reproduzido no banco existente o erro PostgreSQL 42P16 ao aplicar a migração 004: instalações antigas tinham a view com colunas em ordem diferente. A migração agora recria somente a view não materializada, sem CASCADE e sem remover dados das tabelas. O teste PostgreSQL isolado cobre também o formato legado. Após a correção, a migração aplicada no ambiente local permitiu iniciar a API e `/health` respondeu `{"status":"ok"}`. Endereços e comandos de execução permanecem os mesmos.

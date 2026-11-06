@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 import { getMissingAnswerMessage, getResponseTypeLabel } from "../utils/question-presentation.js";
+import { readApiResponse } from "../utils/api-response.js";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const supportedFormats = {
@@ -125,8 +126,7 @@ function App() {
     const poll = async (start = false): Promise<void> => {
       try {
         const response = await fetch(url, { method: start ? "POST" : "GET", signal: controller.signal });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || "Falha na análise pedagógica.");
+        const payload = await readApiResponse<PedagogicalJob>(response);
         if (controller.signal.aborted) return;
         setClassification(payload);
         if (["queued", "running"].includes(payload.status)) timer = setTimeout(() => void poll(), 2000);
@@ -144,7 +144,7 @@ function App() {
     let cancelled = false;
     void fetch(`/documents/${encodeURIComponent(reviewId)}/review`)
       .then(async (response) => {
-        const payload = await response.json() as UploadResult & { sourceText?: string; error?: string };
+        const payload = await readApiResponse<UploadResult & { sourceText?: string; error?: string }>(response);
         if (!response.ok) throw new Error(payload.error || "Não foi possível carregar a revisão.");
         if (!cancelled) {
           setResult({ ...payload, text: payload.sourceText ?? "", reviewUrl: `/documents/${encodeURIComponent(reviewId)}/review`, sourceUrl: `/documents/${encodeURIComponent(reviewId)}/source` });
@@ -198,7 +198,7 @@ function App() {
       const body = new FormData();
       body.append("document", selectedFile);
       const response = await fetch("/documents", { method: "POST", body });
-      const payload = await response.json() as UploadResult & { error?: string };
+      const payload = await readApiResponse<UploadResult & { error?: string }>(response);
       if (!response.ok) throw new Error(payload.error || "Não foi possível enviar o documento.");
 
       setResult(payload);
@@ -236,7 +236,7 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...questionDraft(question), ...(status ? { status } : {}) }),
       });
-      const payload = await response.json() as { questions?: Question[]; error?: string };
+      const payload = await readApiResponse<{ questions?: Question[]; error?: string }>(response);
       if (!response.ok) throw new Error(payload.error || "Não foi possível salvar a revisão.");
       const draft = questionDraft(question);
       if (draft.prompt !== (question.prompt ?? question.text) || JSON.stringify(draft.alternatives) !== JSON.stringify(question.alternatives ?? []) || draft.pedagogy.grade !== question.pedagogy?.grade || draft.pedagogy.discipline !== question.pedagogy?.discipline) {
