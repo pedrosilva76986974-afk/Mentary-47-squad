@@ -4,9 +4,10 @@ import { randomUUID, createHash } from "node:crypto";
 import { classifyPedagogy, type PedagogicalSuggestion } from "./ollama.service.js";
 import { getReviewResult } from "./review-results.service.js";
 import { DocumentValidationError } from "./document-validation.service.js";
-export type ClassificationJob = { documentId: string; status: "queued" | "running" | "completed" | "failed"; model: string; updatedAt: string; sourceHash: string; suggestions: Array<PedagogicalSuggestion & { questionId: string }>; error?: string; owner: string };
+export type ClassificationJob = { documentId: string; status: "queued" | "running" | "completed" | "failed" | "cancelled"; model: string; updatedAt: string; sourceHash: string; suggestions: Array<PedagogicalSuggestion & { questionId: string }>; error?: string; owner: string };
 const owner = randomUUID();
 const active = new Map<string, ClassificationJob>();
+const cancellations = new Map<string, AbortController>();
 let tail = Promise.resolve();
 function path(id: string) { if (!/^[\da-f-]{36}$/i.test(id)) throw new DocumentValidationError("Documento inválido."); return resolve(process.env.MENTARY_CLASSIFICATION_DIRECTORY ?? resolve(process.cwd(), "uploads", "classifications"), `${id}.json`); }
 function hash(questions: unknown) { return createHash("sha256").update(JSON.stringify(questions)).digest("hex"); }
@@ -24,6 +25,7 @@ export async function startClassification(id: string): Promise<ClassificationJob
   path(id);
   const review = await getReviewResult(id);
   if (!review) return undefined;
+  if (review.questions.length === 0) throw new DocumentValidationError("Nenhuma questão identificada para analisar.");
   const sourceHash = hash(snapshot(review.questions));
   const existing = await getClassification(id);
   if (active.has(id) || (existing?.status === "completed" && existing.sourceHash === sourceHash && existing.model === process.env.OLLAMA_MODEL)) return existing;
@@ -32,23 +34,42 @@ export async function startClassification(id: string): Promise<ClassificationJob
   // Check again after asynchronous reads to deduplicate simultaneous starts.
   if (active.has(id)) return structuredClone(active.get(id)!);
   const job: ClassificationJob = { documentId: id, status: "queued", model: process.env.OLLAMA_MODEL, updatedAt: new Date().toISOString(), sourceHash, suggestions: [], owner };
+  const cancellation = new AbortController();
+  cancellations.set(id, cancellation);
   active.set(id, job);
-  try { await save(job); } catch (e) { active.delete(id); throw e; }
+  try { await save(job); } catch (e) { active.delete(id); cancellations.delete(id); throw e; }
   const run = async () => {
+    if (cancellation.signal.aborted) return;
     try {
       job.status = "running"; await save(job);
       for (let offset = 0; offset < review.questions.length; offset += 5) {
         const questions = review.questions.slice(offset, offset + 5);
-        const suggestions = await classifyPedagogy(questions);
+        cancellation.signal.throwIfAborted();
+        const suggestions = await classifyPedagogy(questions, cancellation.signal);
+        cancellation.signal.throwIfAborted();
         job.suggestions.push(...suggestions.map(s => ({ ...s, questionIndex: s.questionIndex + offset, questionId: questions[s.questionIndex]!.id })));
         job.updatedAt = new Date().toISOString();
         await save(job);
       }
+      cancellation.signal.throwIfAborted();
       job.status = "completed";
-    } catch (e) { job.status = "failed"; job.error = e instanceof Error ? e.message : "Falha na análise pedagógica."; }
-    finally { job.updatedAt = new Date().toISOString(); try { await save(job); } finally { active.delete(id); } }
+    } catch (e) { job.status = cancellation.signal.aborted ? "cancelled" : "failed"; job.error = cancellation.signal.aborted ? "Análise cancelada pelo usuário." : e instanceof Error ? e.message : "Falha na análise pedagógica."; }
+    finally { job.updatedAt = new Date().toISOString(); try { await save(job); } finally { if (active.get(id) === job) { active.delete(id); cancellations.delete(id); } } }
   };
   tail = tail.then(run, run).catch(e => console.error("Falha ao persistir análise pedagógica.", e));
   return structuredClone(job);
 }
 export async function classificationIsStale(id: string, job: ClassificationJob) { const review = await getReviewResult(id); return !review || hash(snapshot(review.questions)) !== job.sourceHash; }
+
+export async function cancelClassification(id: string): Promise<ClassificationJob | undefined> {
+  path(id);
+  const current = active.get(id);
+  if (!current) return getClassification(id);
+  if (!["queued", "running"].includes(current.status)) return structuredClone(current);
+  const queued = current.status === "queued";
+  current.status = "cancelled"; current.error = "Análise cancelada pelo usuário."; current.updatedAt = new Date().toISOString();
+  cancellations.get(id)?.abort();
+  await save(current);
+  if (queued && active.get(id) === current) { active.delete(id); cancellations.delete(id); }
+  return structuredClone(current);
+}

@@ -164,6 +164,12 @@ As histórias e seus requisitos estão em `docs/HistoriasUsuarios.markdown`. A p
 
 ## Regras de revisão e candidatos incompletos
 
+Durante o upload, use **Cancelar envio e processamento** para abortar a requisição. O backend detecta a desconexão e propaga o cancelamento entre etapas e páginas, cancela a renderização e termina o worker OCR ativo. Validação, tarefas nativas curtas e operações de armazenamento já iniciadas podem terminar antes de o cancelamento ser observado; registros criados por uma solicitação cancelada são desfeitos quando detectados antes da resposta.
+
+Na revisão, **Cancelar análise da IA** chama `POST /documents/{id}/classification/cancel`. A fila persiste `cancelled`, aborta o fetch ativo e não inicia novos lotes. Resultados de lotes já concluídos permanecem como parciais; é possível tentar novamente. Cancelar novamente é idempotente, e análises concluídas não viram canceladas. Fechar a revisão só interrompe o acompanhamento, mantendo a tarefa em segundo plano. Abortar o HTTP não garante descarregamento imediato do modelo da GPU.
+
+Documentos sem questões não iniciam análise pedagógica. A extração/OCR ainda precisa ler o arquivo para determinar se há candidatos; essa etapa pode ser cancelada pelo usuário.
+
 Toda edição que mantém uma questão aprovada valida enunciado, pelo menos duas alternativas preenchidas com rótulos únicos, gabarito correspondente e responsável pela revisão. Para retirar informações obrigatórias, devolva a questão para `pending_review` na mesma alteração. Uma atualização inválida retorna HTTP 400 e preserva a versão salva.
 
 Candidatos numerados sem alternativas reconhecidas permanecem sinalizados para análise quando não há instrução clara de resposta discursiva ou lista de cálculos. O Ollama não remove candidatos com menos de duas alternativas. Essa preservação pode trazer itens ambíguos para o revisor rejeitar; ela não indica que o texto foi identificado com certeza como múltipla escolha.

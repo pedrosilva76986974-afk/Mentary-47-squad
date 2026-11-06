@@ -61,7 +61,7 @@ type UploadResult = {
 };
 
 type Feedback = { message: string; kind: "success" | "warning" | "error" };
-type PedagogicalJob = { status: "queued" | "running" | "completed" | "failed"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; bnccSkills: string[]; rationale: string; confidence: string; warnings?: string[] }> };
+type PedagogicalJob = { status: "queued" | "running" | "completed" | "failed" | "cancelled"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; bnccSkills: string[]; rationale: string; confidence: string; warnings?: string[] }> };
 
 /** Checks the file's extension, browser MIME type, size, and real file signature before upload. */
 async function validateFile(file: File): Promise<void> {
@@ -106,6 +106,8 @@ function identifierLabel(method: NonNullable<UploadResult["identification"]>["me
 
 function App() {
   const fileInput = useRef<HTMLInputElement>(null);
+  const uploadCancellation = useRef<AbortController | null>(null);
+  useEffect(() => () => uploadCancellation.current?.abort(), []);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
@@ -119,7 +121,7 @@ function App() {
   useEffect(() => {
     const id = result?.origin.id;
     setClassification(null);
-    if (!id) return;
+    if (!id || result?.questionCount === 0 || result?.questions.length === 0) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     const url = `/documents/${encodeURIComponent(id)}/classification`;
@@ -194,13 +196,16 @@ function App() {
     setFeedback(null);
     setResult(null);
     const processingHintTimer = window.setTimeout(() => setShowProcessingHint(true), 5000);
+    const cancellation = new AbortController();
+    uploadCancellation.current = cancellation;
     try {
       const body = new FormData();
       body.append("document", selectedFile);
-      const response = await fetch("/documents", { method: "POST", body });
+      const response = await fetch("/documents", { method: "POST", body, signal: cancellation.signal });
       const payload = await readApiResponse<UploadResult & { error?: string }>(response);
       if (!response.ok) throw new Error(payload.error || "Não foi possível enviar o documento.");
 
+      cancellation.signal.throwIfAborted();
       setResult(payload);
       setFeedback({
         message: `${payload.message} Origem registrada: ${payload.origin.fileName}.`,
@@ -209,8 +214,9 @@ function App() {
       setSelectedFile(null);
       if (fileInput.current) fileInput.current.value = "";
     } catch (error) {
-      setFeedback({ message: errorMessage(error), kind: "error" });
+      setFeedback({ message: cancellation.signal.aborted ? "Envio e processamento cancelados." : errorMessage(error), kind: cancellation.signal.aborted ? "warning" : "error" });
     } finally {
+      uploadCancellation.current = null;
       window.clearTimeout(processingHintTimer);
       setBusy(false);
       setShowProcessingHint(false);
@@ -316,6 +322,7 @@ function App() {
               {busy ? "Enviando e processando…" : "Enviar material"}
               {!busy && <span aria-hidden="true">→</span>}
             </button>
+            {busy && <button type="button" onClick={() => uploadCancellation.current?.abort()}>Cancelar envio e processamento</button>}
             {busy && showProcessingHint && (
               <p className="processing-hint" role="status" aria-live="polite">
                 Ainda estamos processando seu documento. Arquivos escaneados ou a análise pelo Ollama podem levar alguns minutos; se a IA exceder o limite, a identificação local será usada.
@@ -334,10 +341,16 @@ function App() {
                 <p className="card-kicker">ETAPA DE REVISÃO</p>
                 <h2 id="review-title">Questões identificadas</h2>
                 <div role="status" aria-live="polite">
-                  <p>Análise pedagógica: {classification?.status === "completed" ? "concluída — sugestões da IA para conferência" : classification?.status === "failed" ? classification.error : `em andamento (${classification?.suggestions.length ?? 0} classificadas); você já pode revisar as questões`}</p>
+                  <p>Análise pedagógica: {result.questions.length === 0 ? "Nenhuma questão identificada; IA não será executada" : classification?.status === "cancelled" ? "cancelada" : classification?.status === "completed" ? "concluída — sugestões da IA para conferência" : classification?.status === "failed" ? classification.error : `em andamento (${classification?.suggestions.length ?? 0} classificadas); você já pode revisar as questões`}</p>
+                  {(classification?.status === "running" || classification?.status === "queued") && <button type="button" onClick={async () => {
+                    try {
+                      const response = await fetch(`/documents/${encodeURIComponent(result.origin.id ?? "")}/classification/cancel`, { method: "POST" });
+                      setClassification(await readApiResponse<PedagogicalJob>(response));
+                    } catch (error) { setFeedback({ message: errorMessage(error), kind: "error" }); }
+                  }}>Cancelar análise da IA</button>}
                   <p>BNCC sugerida pela IA, sem validação em catálogo oficial. Confira a habilidade, a etapa e a pertinência antes de registrá-la.</p>
                   {classification?.stale && <p>O conteúdo foi alterado após a análise. Solicite uma nova análise.</p>}
-                  <button type="button" disabled={classification?.status === "running" || classification?.status === "queued"} onClick={() => setAnalysisAttempt(n => n + 1)}>Analisar novamente</button>
+                  <button type="button" disabled={result.questions.length === 0 || classification?.status === "running" || classification?.status === "queued"} onClick={() => setAnalysisAttempt(n => n + 1)}>Analisar novamente</button>
                   {classification && classification.suggestions.length > 0 && classification.suggestions.map(s => (
                     <div key={s.questionId}>
                       <strong>Questão {result.questions.find(q => q.id === s.questionId)?.number ?? result.questions.findIndex(q => q.id === s.questionId) + 1}: {s.area || "Área indeterminada"}</strong>

@@ -83,6 +83,53 @@ test("post-extraction pedagogical classification lifecycle", async t => {
       assert.deepEqual(result!.bnccSkills, ["EF01MA08"]);
       assert.ok(result!.warnings?.length);
     });
+    await t.test("cancel aborts pending Ollama request and supports retry", async () => {
+      let aborted = false;
+      let entered!: () => void;
+      const fetching = new Promise<void>(resolve => { entered = resolve; });
+      globalThis.fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {
+        init!.signal!.addEventListener("abort", () => { aborted = true; reject(init!.signal!.reason); }, { once: true });
+        entered();
+      });
+      const started = await request(app).post(url);
+      assert.equal(started.status, 202);
+      await fetching;
+      const cancelled = await request(app).post(`${url}/cancel`);
+      assert.equal(cancelled.body.status, "cancelled");
+      assert.equal(aborted, true);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      assert.equal((await request(app).get(url)).body.status, "cancelled");
+      assert.equal((await request(app).post(`${url}/cancel`)).body.status, "cancelled");
+      globalThis.fetch = async () => response({ suggestions: [suggestion] });
+      await request(app).post(url);
+      assert.equal((await done(url)).status, "completed");
+      assert.equal((await request(app).post(`${url}/cancel`)).body.status, "completed");
+    });
+    await t.test("cancelled queued jobs never call Ollama and empty reviews cannot start AI", async () => {
+      const queuedId = randomUUID();
+      const origin = { id: queuedId, fileName: "queued.pdf", mimeType: "application/pdf", size: 10, sha256: "test", uploadedAt: new Date().toISOString() };
+      await saveReviewResult(origin, { pages: 1, method: "pdf-text", text: "text", pageTexts: ["text"] }, parsed.questions);
+      let calls = 0;
+      let entered!: () => void;
+      const pending = new Promise<void>(resolve => { entered = resolve; });
+      globalThis.fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {
+        calls++; entered();
+        init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason), { once: true });
+      });
+      await request(app).patch(`/documents/${id}/review/questions/${id}-q1`).send({ prompt: "Qual é a soma de 4 e 4?" });
+      await request(app).post(url); await pending;
+      const queuedUrl = `/documents/${queuedId}/classification`;
+      assert.equal((await request(app).post(queuedUrl)).body.status, "queued");
+      assert.equal((await request(app).post(`${queuedUrl}/cancel`)).body.status, "cancelled");
+      await request(app).post(`${url}/cancel`);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      assert.equal(calls, 1);
+      assert.equal((await request(app).get(queuedUrl)).body.status, "cancelled");
+      const emptyId = randomUUID();
+      await saveReviewResult({ ...origin, id: emptyId }, { pages: 1, method: "pdf-text", text: "Texto sem perguntas", pageTexts: ["Texto sem perguntas"] }, []);
+      assert.equal((await request(app).post(`/documents/${emptyId}/classification`)).status, 400);
+      assert.equal(calls, 1);
+    });
   } finally {
     globalThis.fetch = fetch;
     for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];

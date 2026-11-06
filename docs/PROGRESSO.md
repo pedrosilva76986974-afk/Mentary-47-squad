@@ -1,5 +1,13 @@
 # Ciclos de desenvolvimento — 04/11/2026
 
+## Cancelamento de upload e IA — issue #23 — 06/11/2026
+
+Implementado botão de cancelamento do upload com AbortController; o backend observa a desconexão e propaga AbortSignal para PDF/renderização/OCR, verifica cancelamento entre etapas e desfaz os registros da requisição cancelada antes de devolver sucesso. O worker OCR ativo é terminado no cancelamento. Operações nativas curtas/validação/armazenamento já iniciados não são preemptivos; seu resultado é descartado ou desfeito ao observar o sinal.
+
+Acrescentado cancelamento explícito da análise pedagógica: endpoint POST /documents/{id}/classification/cancel, botão na revisão, estado persistido cancelled, interrupção do fetch e dos próximos lotes, preservação de resultados parciais e repetição após cancelamento. Tarefas enfileiradas canceladas não chamam Ollama. Conclusões existentes são preservadas. Documentos sem questões não iniciam IA no frontend e são rejeitados nessa rota pelo backend.
+
+Validação: 94 testes passaram, zero falhas, um teste PostgreSQL optativo ignorado; builds backend e frontend passaram. Regressões cobrem PDF com duas páginas abortado no primeiro OCR, cancelamento antes da extração, requisição Ollama pendente abortada, tarefa enfileirada cancelada, repetição idempotente e nova análise. Não foi homologada visualmente a interação no navegador nem demonstrada liberação imediata de GPU; abortar a chamada não descarrega necessariamente o modelo.
+
 ## Recuperar análise com BNCC malformada — 06/11/2026
 
 O PDF de erro mostrou `Sugestão pedagógica inválida`. A falha foi reproduzida com Qwen 3.5 4B no documento de 13 questões: o modelo retornou descrições no array de códigos e exemplos incompletos como EM13MAT02. A validação anterior rejeitava o lote inteiro, inclusive suas classificações não BNCC.

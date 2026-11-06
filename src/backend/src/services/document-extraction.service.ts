@@ -2,6 +2,7 @@ import { createCanvas } from "@napi-rs/canvas";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { MAX_PDF_PAGES, standardFontDataUrl } from "./pdf-config.js";
 import { recognizeImage } from "./ocr.service.js";
+import { abortable } from "./cancellation.js";
 
 const MIN_DIGITAL_TEXT_LENGTH = 40;
 
@@ -15,7 +16,7 @@ type ExtractionResult = {
 
 type VisualPageReference = { page: number; kind: "image" | "graphic" };
 
-type ImageRecognizer = (image: Buffer) => Promise<string>;
+type ImageRecognizer = (image: Buffer, signal?: AbortSignal) => Promise<string>;
 
 type PdfTextItem = { str: string; hasEOL?: boolean; transform?: number[]; width?: number; height?: number };
 type PositionedLine = { text: string; y: number; left: number; right: number };
@@ -213,10 +214,11 @@ async function detectPageVisuals(page: pdfjs.PDFPageProxy): Promise<VisualPageRe
   return pathCount >= 3 ? "graphic" : undefined;
 }
 
-async function extractPdf(buffer: Buffer, recognize: ImageRecognizer): Promise<ExtractionResult> {
+async function extractPdf(buffer: Buffer, recognize: ImageRecognizer, signal?: AbortSignal): Promise<ExtractionResult> {
+  signal?.throwIfAborted();
   const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer), standardFontDataUrl });
   try {
-    const pdf = await loadingTask.promise;
+    const pdf = await abortable(loadingTask.promise, signal);
     if (pdf.numPages > MAX_PDF_PAGES) {
       throw new Error(`O PDF pode ter no máximo ${MAX_PDF_PAGES} páginas neste MVP.`);
     }
@@ -225,6 +227,7 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer): Promise<E
     const pages = [];
     const visualPages: VisualPageReference[] = [];
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      signal?.throwIfAborted();
       const page = await pdf.getPage(pageNumber);
       pages.push(page);
       const content = await page.getTextContent();
@@ -238,6 +241,7 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer): Promise<E
     let digitalPageCount = 0;
     let ocrPageCount = 0;
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      signal?.throwIfAborted();
       const page = pages[pageNumber - 1]!;
       const { items, width } = pageContents[pageNumber - 1]!;
       const digitalPageText = groupPageText(items, width, repeatedArtifacts);
@@ -250,8 +254,13 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer): Promise<E
       const viewport = page.getViewport({ scale: 1.6 });
       const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const context = canvas.getContext("2d");
-      await page.render({ canvas: canvas as never, canvasContext: context as never, viewport }).promise;
-      const imageText = (await recognize(canvas.toBuffer("image/png"))).trim();
+      const render = page.render({ canvas: canvas as never, canvasContext: context as never, viewport });
+      const cancelRender = () => render.cancel();
+      signal?.addEventListener("abort", cancelRender, { once: true });
+      try { await abortable(render.promise, signal); }
+      finally { signal?.removeEventListener("abort", cancelRender); }
+      signal?.throwIfAborted();
+      const imageText = (await abortable(recognize(canvas.toBuffer("image/png"), signal), signal)).trim();
       pageTexts.push(imageText || digitalPageText);
       ocrPageCount += 1;
     }
@@ -267,9 +276,11 @@ async function extractDocument(
   buffer: Buffer,
   mimeType: string,
   recognize: ImageRecognizer = recognizeImage,
+  signal?: AbortSignal,
 ): Promise<ExtractionResult> {
-  if (mimeType === "application/pdf") return extractPdf(buffer, recognize);
-  const text = await recognize(buffer);
+  signal?.throwIfAborted();
+  if (mimeType === "application/pdf") return extractPdf(buffer, recognize, signal);
+  const text = await abortable(recognize(buffer, signal), signal);
   return { text, pageTexts: [text], pages: 1, method: "ocr", visualPages: [{ page: 1, kind: "image" }] };
 }
 
