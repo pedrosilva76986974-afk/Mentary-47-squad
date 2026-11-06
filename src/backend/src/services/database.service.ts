@@ -37,6 +37,7 @@ async function initializeDatabase(): Promise<void> {
         "001_initial_postgres",
         "002_allow_duplicate_alternative_labels",
         "003_extrator_schema_and_mentary_export",
+        "004_export_readiness",
       ];
       for (const migrationVersion of migrationVersions) {
         const applied = await connection.query("SELECT version FROM schema_migrations WHERE version = $1", [migrationVersion]);
