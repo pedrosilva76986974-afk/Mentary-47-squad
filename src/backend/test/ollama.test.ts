@@ -1,161 +1,84 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import request from "supertest";
+import { app } from "../src/app.js";
 import { identifyQuestionsDetailed } from "../src/services/question-identification.service.js";
+import { saveReviewResult } from "../src/services/review-results.service.js";
+import { classifyPedagogy } from "../src/services/ollama.service.js";
 
-const originalFetch = globalThis.fetch;
-
-function setOllamaEnvironment(): void {
-  process.env.QUESTION_IDENTIFIER = "ollama";
-  process.env.OLLAMA_BASE_URL = "http://127.0.0.1:11434";
-  process.env.OLLAMA_MODEL = "qwen3:4b";
-  process.env.OLLAMA_KEEP_ALIVE = "15m";
+const suggestion = { questionIndex: 0, area: "Matemática", discipline: "Matemática", questionType: "Múltipla escolha", bnccSkills: ["EF01MA08"], rationale: "Adição de números naturais; conferir etapa.", confidence: "medium" };
+function response(value: unknown) { return new Response(JSON.stringify({ message: { content: JSON.stringify(value) } }), { status: 200 }); }
+async function done(url: string) {
+  for (let i = 0; i < 200; i++) {
+    const r = await request(app).get(url);
+    if (["completed", "failed"].includes(r.body.status)) return r.body;
+    await new Promise(r => setTimeout(r, 10));
+  }
+  throw new Error("Job did not finish");
 }
-
-function readEnvironment(): Record<string, string | undefined> {
-  return Object.fromEntries(["QUESTION_IDENTIFIER", "OLLAMA_BASE_URL", "OLLAMA_MODEL", "OLLAMA_TIMEOUT_MS", "OLLAMA_KEEP_ALIVE"].map((key) => [key, process.env[key]]));
-}
-
-function restoreEnvironment(values: Record<string, string | undefined>): void {
-  for (const [key, value] of Object.entries(values)) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-  globalThis.fetch = originalFetch;
-}
-
-function classificationResponse(entries: unknown[], duration = 1_450_000_000): Response {
-  return new Response(JSON.stringify({
-    message: { content: JSON.stringify({ classifications: entries }) },
-    total_duration: duration,
-    load_duration: 350_000_000,
-    prompt_eval_count: 200,
-    eval_count: 20,
-  }), { status: 200, headers: { "content-type": "application/json" } });
-}
-
-test("Ollama classifies multiple-choice candidates without generating or changing their content", async () => {
-  const previous = readEnvironment();
-  setOllamaEnvironment();
-  globalThis.fetch = async (input, init) => {
-    assert.equal(String(input), "http://127.0.0.1:11434/api/chat");
-    const body = JSON.parse(String(init?.body)) as {
-      model: string;
-      messages: Array<{ role: string; content: string }>;
-      format: { properties: { classifications: unknown } };
-    };
-    assert.equal(body.model, "qwen3:4b");
-    const system = body.messages.find((message) => message.role === "system")?.content ?? "";
-    assert.match(system, /isMultipleChoice/);
-    assert.match(system, /listas de exercícios/);
-    assert.doesNotMatch(system, /responseType: open/);
-    const state = JSON.parse(body.messages.find((message) => message.role === "user")?.content ?? "[]") as Array<Record<string, unknown>>;
-    assert.equal(state.length, 1);
-    assert.equal(state[0]?.number, 1);
-    assert.equal(state[0]?.prompt, "Qual é a capital do Brasil?");
-    assert.deepEqual(state[0]?.alternatives, [
-      { label: "A", text: "Brasília" },
-      { label: "B", text: "Salvador" },
-    ]);
-    assert.equal("text" in state[0]!, false);
-    assert.equal("answer" in state[0]!, false);
-    assert.deepEqual(Object.keys(body.format.properties), ["classifications"]);
-    return classificationResponse([{ questionIndex: 0, isMultipleChoice: true, confidence: "high" }]);
-  };
-
+test("post-extraction pedagogical classification lifecycle", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "mentary-pedagogy-"));
+  const previous = { ...process.env }; const fetch = globalThis.fetch;
+  process.env.MENTARY_REVIEW_DIRECTORY = join(directory, "reviews");
+  process.env.MENTARY_CLASSIFICATION_DIRECTORY = join(directory, "jobs");
+  process.env.QUESTION_IDENTIFIER = "ollama"; process.env.OLLAMA_MODEL = "test-model";
+  delete process.env.DATABASE_URL;
   try {
-    const result = await identifyQuestionsDetailed(["Questão 1: Qual é a capital do Brasil?\nA) Brasília\nB) Salvador"]);
-    const question = result.questions[0];
-    assert.ok(question);
-    assert.equal(question.responseType, "multiple_choice");
-    assert.equal(question.prompt, "Qual é a capital do Brasil?");
-    assert.deepEqual(question.alternatives, [
-      { label: "A", text: "Brasília" },
-      { label: "B", text: "Salvador" },
-    ]);
-    assert.equal(result.diagnostics.method, "ollama");
-    assert.deepEqual(result.diagnostics.ollama, { durationMs: 1450, loadDurationMs: 350, promptTokens: 200, outputTokens: 20 });
+    let calls = 0;
+    let release!: (r: Response) => void;
+    globalThis.fetch = async () => { calls++; return new Promise<Response>(r => { release = r; }); };
+    const parsed = await identifyQuestionsDetailed(["Questão 1: Quanto é 2 + 2? A) 3 B) 4"]);
+    assert.equal(calls, 0, "Extraction must never call Ollama");
+    const id = randomUUID();
+    await saveReviewResult({ id, fileName: "test.pdf", mimeType: "application/pdf", size: 10, sha256: "test", uploadedAt: new Date().toISOString() },
+      { pages: 1, method: "pdf-text", text: "test", pageTexts: ["test"] }, parsed.questions);
+    const url = `/documents/${id}/classification`;
+    await t.test("returns 202 while model is still pending and deduplicates starts", async () => {
+      const start = await request(app).post(url); assert.equal(start.status, 202);
+      const second = await request(app).post(url); assert.equal(second.status, 202);
+      assert.equal(calls, 1);
+      release(response({ suggestions: [suggestion] }));
+      const job = await done(url); assert.equal(job.status, "completed");
+      assert.deepEqual(job.suggestions[0].bnccSkills, ["EF01MA08"]);
+      assert.equal(job.suggestions[0].questionId, `${id}-q1`);
+      const review = await request(app).get(`/documents/${id}/review`);
+      assert.equal(review.body.questions[0].pedagogy, undefined, "AI must not overwrite human metadata");
+      assert.equal(review.body.questions[0].status, "pending_review");
+      await request(app).post(url); assert.equal(calls, 1, "Completed same-content job is cached");
+    });
+    await t.test("flags changed content and records failures for retry", async () => {
+      await request(app).patch(`/documents/${id}/review/questions/${id}-q1`).send({ prompt: "Quanto é 3 + 3?" });
+      assert.equal((await request(app).get(url)).body.stale, true);
+      globalThis.fetch = async () => response({ suggestions: [{ ...suggestion, bnccSkills: ["INVENTED"] }] });
+      await request(app).post(url);
+      assert.equal((await done(url)).status, "failed");
+      globalThis.fetch = async () => response({ suggestions: [suggestion] });
+      await request(app).post(url); assert.equal((await done(url)).status, "completed");
+      await request(app).patch(`/documents/${id}/review/questions/${id}-q1`).send({ pedagogy: { grade: "1º ano" } });
+      assert.equal((await request(app).get(url)).body.stale, true, "Grade changes must invalidate BNCC suggestions");
+    });
+    await t.test("persisted unfinished jobs from another process become retryable failures", async () => {
+      const file = join(directory, "jobs", `${id}.json`);
+      const job = JSON.parse(await readFile(file, "utf8")); job.status = "running"; job.owner = "old-process";
+      await writeFile(file, JSON.stringify(job));
+      assert.equal((await request(app).get(url)).body.status, "failed");
+    });
+    await t.test("rejects malformed indexes and never accepts duplicate classifications", async () => {
+      globalThis.fetch = async () => response({ suggestions: [{ ...suggestion, questionIndex: 7 }] });
+      await assert.rejects(classifyPedagogy(parsed.questions));
+      globalThis.fetch = async () => response({ suggestions: [suggestion, suggestion] });
+      await assert.rejects(classifyPedagogy([...parsed.questions, ...parsed.questions]));
+      assert.equal((await request(app).post("/documents/not-a-uuid/classification")).status, 400);
+      assert.equal((await request(app).post(`/documents/${randomUUID()}/classification`)).status, 404);
+    });
   } finally {
-    restoreEnvironment(previous);
-  }
-});
-
-test("Ollama removes a high-confidence non-objective false positive", async () => {
-  const previous = readEnvironment();
-  setOllamaEnvironment();
-  globalThis.fetch = async () => classificationResponse([{ questionIndex: 0, isMultipleChoice: false, confidence: "high" }]);
-  try {
-    const result = await identifyQuestionsDetailed([
-      "1) Marque a alternativa que explica o tema: a) Uma opção b) Outra opção.\n2) Explique a importância da água.",
-    ]);
-    assert.equal(result.questions.length, 0);
-    assert.equal(result.diagnostics.method, "ollama");
-  } finally {
-    restoreEnvironment(previous);
-  }
-});
-
-test("Ollama cannot discard an incomplete numbered candidate", async () => {
-  const previous = readEnvironment();
-  setOllamaEnvironment();
-  globalThis.fetch = async () => classificationResponse([{ questionIndex: 0, isMultipleChoice: false, confidence: "high" }]);
-  try {
-    const result = await identifyQuestionsDetailed(["Questão 1: Qual é a capital do Brasil?"]);
-    assert.equal(result.questions.length, 1);
-    assert.ok(result.questions[0]!.missingComponents!.includes("alternatives"));
-    assert.equal(result.diagnostics.method, "ollama+rules");
-  } finally {
-    restoreEnvironment(previous);
-  }
-});
-
-test("falls back to local objective-question detection when Ollama is unavailable", async () => {
-  const previous = readEnvironment();
-  const originalError = console.error;
-  setOllamaEnvironment();
-  globalThis.fetch = async () => new Response("model not found", { status: 404 });
-  console.error = () => undefined;
-  try {
-    const result = await identifyQuestionsDetailed(["Questão 1: Assinale a alternativa correta.\nA) Sim\nB) Não"]);
-    assert.equal(result.questions.length, 1);
-    assert.equal(result.questions[0]?.responseType, "multiple_choice");
-    assert.equal(result.diagnostics.method, "rules");
-    assert.match(result.diagnostics.reason ?? "", /HTTP 404/);
-  } finally {
-    console.error = originalError;
-    restoreEnvironment(previous);
-  }
-});
-
-test("does not drop objective questions when Ollama returns an invalid classification index", async () => {
-  const previous = readEnvironment();
-  const originalError = console.error;
-  setOllamaEnvironment();
-  globalThis.fetch = async () => classificationResponse([{ questionIndex: 8, isMultipleChoice: true, confidence: "high" }]);
-  console.error = () => undefined;
-  try {
-    const result = await identifyQuestionsDetailed(["Questão 1: Qual é a capital do Brasil?\nA) Brasília\nB) Salvador"]);
-    assert.equal(result.questions.length, 1);
-    assert.equal(result.questions[0]?.responseType, "multiple_choice");
-    assert.equal(result.diagnostics.method, "rules");
-  } finally {
-    console.error = originalError;
-    restoreEnvironment(previous);
-  }
-});
-
-test("does not call Ollama when local parsing finds no objective candidates", async () => {
-  const previous = readEnvironment();
-  setOllamaEnvironment();
-  let calls = 0;
-  globalThis.fetch = async () => {
-    calls += 1;
-    return classificationResponse([]);
-  };
-  try {
-    const result = await identifyQuestionsDetailed(["Documento sem questão avaliativa."]);
-    assert.equal(result.questions.length, 0);
-    assert.equal(calls, 0);
-  } finally {
-    restoreEnvironment(previous);
+    globalThis.fetch = fetch;
+    for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
+    Object.assign(process.env, previous);
+    await rm(directory, { recursive: true, force: true });
   }
 });

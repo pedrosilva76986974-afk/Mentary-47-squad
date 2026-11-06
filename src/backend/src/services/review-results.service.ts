@@ -20,6 +20,8 @@ type ReviewQuestion = ParsedQuestion & {
   answerKey?: string | null;
   pedagogy?: {
     discipline?: string;
+    area?: string;
+    questionType?: string;
     grade?: string;
     topic?: string;
     bnccSkills?: string[];
@@ -221,7 +223,7 @@ async function updateReviewQuestion(
     }
     const changes = update.pedagogy as Record<string, unknown>;
     const pedagogy: PedagogyMetadata = { ...question.pedagogy };
-    for (const field of ["discipline", "grade", "topic", "descriptor"] as const) {
+    for (const field of ["discipline", "area", "questionType", "grade", "topic", "descriptor"] as const) {
       if (field in changes) {
         const value = changes[field];
         if (typeof value !== "string" || value.length > 250) throw new DocumentValidationError(`O campo pedagógico ${field} deve ter até 250 caracteres.`);

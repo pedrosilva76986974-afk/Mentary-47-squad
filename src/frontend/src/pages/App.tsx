@@ -19,6 +19,8 @@ type Question = {
   alternatives?: Array<{ label: string; text: string }>;
   pedagogy?: {
     discipline?: string;
+    area?: string;
+    questionType?: string;
     grade?: string;
     topic?: string;
     bnccSkills?: string[];
@@ -58,6 +60,7 @@ type UploadResult = {
 };
 
 type Feedback = { message: string; kind: "success" | "warning" | "error" };
+type PedagogicalJob = { status: "queued" | "running" | "completed" | "failed"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; bnccSkills: string[]; rationale: string; confidence: string }> };
 
 /** Checks the file's extension, browser MIME type, size, and real file signature before upload. */
 async function validateFile(file: File): Promise<void> {
@@ -110,6 +113,30 @@ function App() {
   const [dragging, setDragging] = useState(false);
   const [questionDrafts, setQuestionDrafts] = useState<Record<string, ReviewUpdate>>({});
   const [savingQuestion, setSavingQuestion] = useState<string | null>(null);
+  const [classification, setClassification] = useState<PedagogicalJob | null>(null);
+  const [analysisAttempt, setAnalysisAttempt] = useState(0);
+  useEffect(() => {
+    const id = result?.origin.id;
+    setClassification(null);
+    if (!id) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const url = `/documents/${encodeURIComponent(id)}/classification`;
+    const poll = async (start = false): Promise<void> => {
+      try {
+        const response = await fetch(url, { method: start ? "POST" : "GET", signal: controller.signal });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "Falha na análise pedagógica.");
+        if (controller.signal.aborted) return;
+        setClassification(payload);
+        if (["queued", "running"].includes(payload.status)) timer = setTimeout(() => void poll(), 2000);
+      } catch (e) {
+        if (!controller.signal.aborted) setClassification({ status: "failed", suggestions: [], error: errorMessage(e) });
+      }
+    };
+    void poll(true);
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [result?.origin.id, analysisAttempt]);
 
   useEffect(() => {
     const reviewId = new URLSearchParams(window.location.search).get("review");
@@ -211,6 +238,10 @@ function App() {
       });
       const payload = await response.json() as { questions?: Question[]; error?: string };
       if (!response.ok) throw new Error(payload.error || "Não foi possível salvar a revisão.");
+      const draft = questionDraft(question);
+      if (draft.prompt !== (question.prompt ?? question.text) || JSON.stringify(draft.alternatives) !== JSON.stringify(question.alternatives ?? []) || draft.pedagogy.grade !== question.pedagogy?.grade || draft.pedagogy.discipline !== question.pedagogy?.discipline) {
+        setClassification(current => current ? { ...current, stale: true } : current);
+      }
       if (payload.questions) setResult((current) => current ? { ...current, questions: payload.questions! } : current);
       setQuestionDrafts((current) => { const next = { ...current }; delete next[question.id]; return next; });
       setFeedback({ message: status === "approved" ? "Questão aprovada e salva." : status === "rejected" ? "Questão rejeitada e salva." : status === "pending_review" ? "Questão mantida em revisão." : "Alterações da questão salvas.", kind: "success" });
@@ -302,6 +333,32 @@ function App() {
               <div>
                 <p className="card-kicker">ETAPA DE REVISÃO</p>
                 <h2 id="review-title">Questões identificadas</h2>
+                <div role="status" aria-live="polite">
+                  <p>Análise pedagógica: {classification?.status === "completed" ? "concluída — sugestões da IA para conferência" : classification?.status === "failed" ? classification.error : "em andamento; você já pode revisar as questões"}</p>
+                  <p>BNCC sugerida pela IA, sem validação em catálogo oficial. Confira a habilidade, a etapa e a pertinência antes de registrá-la.</p>
+                  {classification?.stale && <p>O conteúdo foi alterado após a análise. Solicite uma nova análise.</p>}
+                  <button type="button" disabled={classification?.status === "running" || classification?.status === "queued"} onClick={() => setAnalysisAttempt(n => n + 1)}>Analisar novamente</button>
+                  {classification?.status === "completed" && classification.suggestions.map(s => (
+                    <div key={s.questionId}>
+                      <strong>Questão {result.questions.find(q => q.id === s.questionId)?.number ?? result.questions.findIndex(q => q.id === s.questionId) + 1}: {s.area || "Área indeterminada"}</strong>
+                      <p>{s.discipline} · {s.questionType} · Confiança informada pela IA: {s.confidence}</p>
+                      <p>BNCC sugerida: {s.bnccSkills.join(", ") || "Não identificada com segurança"}</p>
+                      <p>{s.rationale}</p>
+                      <button type="button" disabled={classification.stale || s.confidence === "low"} onClick={() => {
+                        const question = result.questions.find(q => q.id === s.questionId);
+                        if (!question) return;
+                        const draft = questionDraft(question);
+                        const pedagogy = draft.pedagogy;
+                        setQuestionDrafts(current => ({ ...current, [question.id]: { ...draft, pedagogy: {
+                          ...pedagogy, area: pedagogy.area || s.area, questionType: pedagogy.questionType || s.questionType,
+                          discipline: pedagogy.discipline || s.discipline,
+                          bnccSkills: pedagogy.bnccSkills?.length ? pedagogy.bnccSkills : s.bnccSkills,
+                        } } }));
+                        setFeedback({ message: "Sugestão copiada apenas para campos vazios. Confira a BNCC e salve a questão para registrar.", kind: "warning" });
+                      }}>Usar sugestão nos campos vazios</button>
+                    </div>
+                  ))}
+                </div>
                 <p className="review-summary">
                   {result.questionCount === 0
                     ? "O texto foi extraído, mas não encontramos enunciados com segurança suficiente."
@@ -418,6 +475,8 @@ function App() {
                     {question.answerKey && <p className="question-answer-empty"><strong>Gabarito registrado:</strong> {question.answerKey}</p>}
                     <details className="question-pedagogy">
                       <summary>Classificação pedagógica</summary>
+                      <label className="question-edit-field"><span>Área do conhecimento</span><input value={questionDraft(question).pedagogy.area ?? ""} onChange={event => setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, area: event.currentTarget.value } } }))} /></label>
+                      <label className="question-edit-field"><span>Tipo de questão</span><input value={questionDraft(question).pedagogy.questionType ?? ""} onChange={event => setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, questionType: event.currentTarget.value } } }))} /></label>
                       <div className="pedagogy-fields">
                         <label className="question-edit-field"><span>Disciplina</span><input value={questionDraft(question).pedagogy.discipline ?? ""} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, discipline: event.currentTarget.value } } }))} /></label>
                         <label className="question-edit-field"><span>Ano/série</span><input value={questionDraft(question).pedagogy.grade ?? ""} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, grade: event.currentTarget.value } } }))} /></label>

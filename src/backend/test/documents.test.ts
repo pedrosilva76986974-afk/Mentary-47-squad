@@ -110,7 +110,7 @@ test("PATCH review question saves edits, answer key, and review status", async (
       alternatives: [{ label: "A", text: "3" }, { label: "B", text: "4" }],
       answerKey: "B",
       pedagogy: {
-        discipline: "Matemática", grade: "8º ano", topic: "Adição", bnccSkills: ["EF08MA01"], descriptor: "D1", difficulty: "easy",
+        discipline: "Matemática", area: "Matemática", questionType: "Múltipla escolha", grade: "8º ano", topic: "Adição", bnccSkills: ["EF08MA01"], descriptor: "D1", difficulty: "easy",
         userId: "11111111-1111-4111-8111-111111111111",
         institutionId: "22222222-2222-4222-8222-222222222222",
       },
@@ -131,6 +131,8 @@ test("PATCH review question saves edits, answer key, and review status", async (
   assert.equal(persisted.body.questions[0].answerKey, "B");
   assert.equal(persisted.body.questions[0].status, "approved");
   assert.equal(persisted.body.questions[0].pedagogy.discipline, "Matemática");
+  assert.equal(persisted.body.questions[0].pedagogy.area, "Matemática");
+  assert.equal(persisted.body.questions[0].pedagogy.questionType, "Múltipla escolha");
 });
 
 test("PATCH review question rejects approval of multiple choice without an answer key", async () => {

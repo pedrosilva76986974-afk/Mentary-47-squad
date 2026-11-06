@@ -96,29 +96,32 @@ As questões ficam disponíveis na tela de revisão logo após o envio. Também 
 
 Os dados das revisões — texto extraído, questões, alternativas e alterações feitas pelo revisor — ficam no PostgreSQL. Os metadados de origem continuam em `src/backend/uploads/manifest.json` e os arquivos originais ficam em `src/backend/uploads/documents`; eles podem ser consultados pela rota `GET /documents/{id}/source`. O PostgreSQL e os arquivos precisam estar disponíveis para restaurar uma revisão completa. Por padrão, documentos e revisões com mais de 30 dias são removidos na inicialização e depois diariamente. Configure `MENTARY_RETENTION_DAYS` para outro prazo em dias ou use `0` para desativar a limpeza automática.
 
-## Identificação de questões com Ollama (opcional)
+## Análise pedagógica com Ollama após a extração
 
-Instale o [Ollama para Windows](https://ollama.com/download/windows) ou a versão correspondente ao seu sistema operacional. No Windows, abra o aplicativo Ollama pelo menu Iniciar e, em um terminal novo, baixe um modelo local gratuito. Exemplo:
+O upload usa somente PDF.js/OCR e o parser local. O Ollama não participa da extração nem filtra as questões. Depois que a revisão aparece, o navegador solicita uma análise pedagógica em segundo plano e consulta seu andamento a cada dois segundos. A revisão continua disponível durante a análise.
 
-```powershell
-ollama pull qwen3:4b
-ollama list
+Configure no ambiente do backend:
+
+```env
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=qwen3.5:4b
+OLLAMA_TIMEOUT_MS=90000
+OLLAMA_KEEP_ALIVE=15m
 ```
 
-O comando `ollama list` mostra o nome exato do modelo instalado. Abra um terminal na pasta `src/backend`, configure a integração e inicie a API:
+Baixe o modelo com `ollama pull qwen3.5:4b` e mantenha o Ollama aberto. `QUESTION_IDENTIFIER` não controla mais a análise: a extração é sempre local e a análise pedagógica é iniciada pela rota posterior.
 
-```powershell
-$env:QUESTION_IDENTIFIER = "ollama"
-$env:OLLAMA_BASE_URL = "http://127.0.0.1:11434"
-$env:OLLAMA_MODEL = "qwen3:4b"
-$env:OLLAMA_TIMEOUT_MS = "90000"
-$env:OLLAMA_KEEP_ALIVE = "15m"
-npm run dev
-```
+A IA sugere área do conhecimento, disciplina, tipo de questão, códigos BNCC e uma justificativa, com confiança declarada pelo próprio modelo. Os códigos são verificados quanto ao formato, sem consulta a catálogo oficial. Portanto, sua existência e pertinência precisam de conferência humana. Referência: [BNCC oficial](https://basenacionalcomum.mec.gov.br/).
 
-Substitua `qwen3:4b` pelo nome exato que apareceu no seu `ollama list`. O backend usa a API local `http://127.0.0.1:11434/api/chat` para classificar se os itens já separados pelo parser são questões de múltipla escolha. A extração do texto e a separação do enunciado e das alternativas continuam locais; o Ollama não reescreve nem fornece conteúdo. Questões discursivas e listas de cálculos são descartadas, enquanto questões objetivas sem alternativas legíveis ficam sinalizadas para revisão. Se a IA falhar ou não tiver confiança suficiente, o resultado local é mantido. O gabarito só é mostrado quando está escrito no documento ou registrado pelo revisor; a IA não resolve a questão. Sem `QUESTION_IDENTIFIER=ollama`, o projeto usa apenas as regras locais.
+Sugestões ficam separadas dos metadados confirmados. A tela permite copiar sugestões de confiança média/alta apenas para campos vazios; o revisor deve conferir e salvar a questão. Confiança baixa não permite cópia rápida. Área e tipo também podem ser editados manualmente. Texto, alternativas, gabarito e status não são modificados pela IA.
 
-Para usar um modelo de nuvem, configure o nome do modelo de nuvem no `OLLAMA_MODEL`, entre na sua conta do Ollama e confirme que o aplicativo/CLI consegue executá-lo. O uso de nuvem pode estar sujeito aos limites gratuitos ou à cobrança da conta; modelos locais não consomem créditos de nuvem.
+API posterior ao upload:
+
+- `POST /documents/{id}/classification`: retorna HTTP 202 com o estado; inicia ou reutiliza a análise do mesmo conteúdo/modelo.
+- `GET /documents/{id}/classification`: retorna estado, sugestões e indicação de conteúdo alterado desde a análise.
+- Estados: `queued`, `running`, `completed`, `failed`. A tela permite tentar novamente após falha.
+
+A fila executa uma análise de cada vez em lotes de cinco questões, com até vinte documentos ativos. Resultados e estados são persistidos em `src/backend/uploads/classifications` (ou `MENTARY_CLASSIFICATION_DIRECTORY`). Esse diretório precisa ser incluído no backup junto aos uploads. Processos interrompidos são sinalizados ao consultar a análise e podem ser repetidos; a fila não retoma sozinha após reinício. Esta implementação é para uma instância do backend, sem coordenação entre vários servidores. Falhas da IA não impedem upload nem revisão. O processamento local ainda compete pelos recursos da máquina enquanto a IA está ativa.
 
 ## Compilar e verificar o projeto
 

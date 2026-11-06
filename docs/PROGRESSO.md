@@ -1,5 +1,19 @@
 # Ciclos de desenvolvimento — 04/11/2026
 
+## Análise pedagógica posterior ao upload — 06/11/2026
+
+O Ollama foi retirado da identificação síncrona. PDF.js/OCR e parser local devolvem a revisão sem esperar pela IA. A interface inicia uma solicitação posterior via POST e consulta o estado via GET, sem bloquear a edição.
+
+Foi implementada fila serial com limite de vinte documentos ativos e lotes de cinco questões. As sugestões e os estados são salvos em arquivos separados das revisões. Solicitações simultâneas são deduplicadas; resultados do mesmo conteúdo/modelo são reutilizados. Falhas podem ser repetidas e análises interrompidas por reinício são sinalizadas. A fila é para uma instância do servidor; não há recuperação automática ou coordenação distribuída.
+
+A IA sugere área, disciplina, tipo de questão e BNCC com justificativa e confiança. Ano/série e disciplina já informados são enviados como contexto. Mudanças no enunciado, alternativas ou contexto pedagógico invalidam as sugestões anteriores. Área e tipo foram acrescentados aos campos editáveis e são persistidos no JSON pedagógico existente. Sugestões média/alta podem preencher somente campos vazios após ação explícita do revisor; confiança baixa não permite cópia rápida. É necessário salvar para confirmar os dados.
+
+Validação: suíte geral com 86 testes passando, zero falhas e um teste PostgreSQL optativo ignorado; ambos os builds passaram. Testes direcionados (cinco, incluindo o teste pai) cobriram retorno sem esperar pelo modelo, deduplicação, cache, falhas, repetição, preservação dos dados revisados, conteúdo desatualizado, reinício e rejeição de índices/códigos inválidos. Os testes antigos de filtragem síncrona pelo Ollama foram substituídos, pois esse comportamento foi removido.
+
+Ensaio real com `qwen3.5:4b` em uma questão fictícia: aproximadamente 33 segundos na primeira execução e 3,3 segundos na segunda com modelo carregado. A resposta foi de baixa confiança e BNCC vazia; a primeira resposta também errou o tipo. Esses ensaios validam comunicação e formato, não acurácia pedagógica. As instruções foram ajustadas e a cópia rápida de baixa confiança foi bloqueada. Os tempos são amostras únicas, não benchmark.
+
+Limites: códigos BNCC passam por validação de formato, sem consulta a catálogo oficial. Sua existência e pertinência não são garantidas pelo modelo. Conferência docente continua obrigatória. Não há classificação automática de gabarito, aprovação nem alteração de texto pela IA. O processamento em segundo plano ainda compartilha CPU/GPU com extração e OCR. Não foi feita homologação visual manual do navegador; os campos novos passaram por compilação e verificação de tipos.
+
 ## Retomada — 06/11/2026
 
 O Docker Engine voltou a ficar disponível. Foi acrescentado um teste real de PostgreSQL que cria um banco com nome aleatório, aplica as migrações e remove apenas esse banco temporário ao terminar. O banco da aplicação permanece preservado.
