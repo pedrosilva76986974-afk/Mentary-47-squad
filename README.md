@@ -1,3 +1,14 @@
+# Squad 47
+
+Integrantes:
+
+- [Lucas Gabriel de Santana Santos](https://github.com/LcExe7)
+- [Pedro Gabriel Lima da Silva](https://github.com/pedrosilva76986974-afk)
+- [João Guilherme Correia Aires](https://github.com/eujotag)
+- [Lucas Nascimento Corumba](https://github.com/lucas124211)
+- [Sérgio Lorran Souza da Paixão](https://github.com/Lorran-12)
+- [Carla Maria Mota Chagas](https://github.com/caah522)
+
 # Mentary
 
 Extrator de Questões e Módulo de Inteligência Avaliativa.
@@ -136,3 +147,34 @@ O build do frontend verifica os tipos TypeScript e gera os arquivos estáticos e
 - `docs` — documentação do projeto
 - `database` — scripts e estrutura do banco de dados
 - `src/backend/test` — testes automatizados do backend
+
+## Fluxo de desenvolvimento
+
+1. Escolha a issue e confira seus critérios de aceitação antes de implementar.
+2. Crie uma branch por funcionalidade ou correção usando `feature/USxx-descricao`.
+3. Faça commits por alteração coerente, incluindo `Refs #numero` para relacionar a issue.
+4. Execute os testes e os builds do backend e frontend antes de abrir um Pull Request.
+5. Abra um Pull Request para `main`, descrevendo os critérios atendidos, a validação e as pendências.
+6. Integre código à `main` pelo Pull Request revisado; não faça commits ou pushes diretamente nela.
+
+As histórias e seus requisitos estão em `docs/HistoriasUsuarios.markdown`. A proteção da branch é uma configuração do GitHub e precisa ser conferida nas regras do repositório; este texto não a configura automaticamente.
+
+## Regras de revisão e candidatos incompletos
+
+Toda edição que mantém uma questão aprovada valida enunciado, pelo menos duas alternativas preenchidas com rótulos únicos, gabarito correspondente e responsável pela revisão. Para retirar informações obrigatórias, devolva a questão para `pending_review` na mesma alteração. Uma atualização inválida retorna HTTP 400 e preserva a versão salva.
+
+Candidatos numerados sem alternativas reconhecidas permanecem sinalizados para análise quando não há instrução clara de resposta discursiva ou lista de cálculos. O Ollama não remove candidatos com menos de duas alternativas. Essa preservação pode trazer itens ambíguos para o revisor rejeitar; ela não indica que o texto foi identificado com certeza como múltipla escolha.
+
+O acompanhamento dos ciclos e das limitações de validação está em `docs/PROGRESSO.md`.
+
+## Testar a persistência real no PostgreSQL
+
+Com o PostgreSQL disponível e `DATABASE_URL` configurada no `.env`, execute na pasta `src/backend`:
+
+```powershell
+$env:MENTARY_POSTGRES_TEST = "1"
+node --env-file=../../.env --import tsx --test --test-force-exit test/postgres.integration.test.ts
+Remove-Item Env:MENTARY_POSTGRES_TEST
+```
+
+O teste exige permissão para criar um banco temporário. Ele cria um nome aleatório, valida migrações, persistência, rollback e a view de exportação, e remove somente esse banco de teste ao terminar. A suíte comum ignora esse teste quando `MENTARY_POSTGRES_TEST` não está ativado. O teste não publica questões em `public.questions`.
