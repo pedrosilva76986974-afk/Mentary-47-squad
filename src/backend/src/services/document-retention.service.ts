@@ -1,6 +1,7 @@
-import { readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { removeDocumentOrigin, type DocumentOrigin } from "./document-origin.service.js";
+import { removeReviewResult } from "./review-results.service.js";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const documentIdPattern = /^[\da-f-]{36}$/i;
@@ -19,7 +20,6 @@ async function cleanupExpiredDocuments(now = Date.now()): Promise<number> {
   if (retentionDays === 0) return 0;
 
   const registryPath = process.env.MENTARY_UPLOAD_REGISTRY ?? resolve(process.cwd(), "uploads", "manifest.json");
-  const reviewDirectory = process.env.MENTARY_REVIEW_DIRECTORY ?? resolve(process.cwd(), "uploads", "reviews");
   let records: DocumentOrigin[];
   try {
     records = JSON.parse(await readFile(registryPath, "utf8")) as DocumentOrigin[];
@@ -37,7 +37,7 @@ async function cleanupExpiredDocuments(now = Date.now()): Promise<number> {
     .map((record) => record.id);
   if (expiredIds.length === 0) return 0;
 
-  await Promise.all(expiredIds.map((id) => rm(resolve(reviewDirectory, `${id}.json`), { force: true })));
+  await Promise.all(expiredIds.map((id) => removeReviewResult(id)));
   await Promise.all(expiredIds.map((id) => removeDocumentOrigin(id)));
   return expiredIds.length;
 }

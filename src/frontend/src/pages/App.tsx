@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 import { getMissingAnswerMessage, getResponseTypeLabel } from "../utils/question-presentation.js";
+import { readApiResponse } from "../utils/api-response.js";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const supportedFormats = {
@@ -14,12 +15,13 @@ type Question = {
   number: number | null;
   text: string;
   prompt?: string;
-  answer?: string | null;
   answerKey?: string | null;
-  responseType?: "open" | "multiple_choice" | "mixed" | "unknown";
+  responseType?: "multiple_choice";
   alternatives?: Array<{ label: string; text: string }>;
   pedagogy?: {
     discipline?: string;
+    area?: string;
+    questionType?: string;
     grade?: string;
     topic?: string;
     bnccSkills?: string[];
@@ -59,6 +61,7 @@ type UploadResult = {
 };
 
 type Feedback = { message: string; kind: "success" | "warning" | "error" };
+type PedagogicalJob = { status: "queued" | "running" | "completed" | "failed" | "cancelled"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; bnccSkills: string[]; rationale: string; confidence: string; warnings?: string[] }> };
 
 /** Checks the file's extension, browser MIME type, size, and real file signature before upload. */
 async function validateFile(file: File): Promise<void> {
@@ -103,6 +106,8 @@ function identifierLabel(method: NonNullable<UploadResult["identification"]>["me
 
 function App() {
   const fileInput = useRef<HTMLInputElement>(null);
+  const uploadCancellation = useRef<AbortController | null>(null);
+  useEffect(() => () => uploadCancellation.current?.abort(), []);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
@@ -111,6 +116,29 @@ function App() {
   const [dragging, setDragging] = useState(false);
   const [questionDrafts, setQuestionDrafts] = useState<Record<string, ReviewUpdate>>({});
   const [savingQuestion, setSavingQuestion] = useState<string | null>(null);
+  const [classification, setClassification] = useState<PedagogicalJob | null>(null);
+  const [analysisAttempt, setAnalysisAttempt] = useState(0);
+  useEffect(() => {
+    const id = result?.origin.id;
+    setClassification(null);
+    if (!id || result?.questionCount === 0 || result?.questions.length === 0) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const url = `/documents/${encodeURIComponent(id)}/classification`;
+    const poll = async (start = false): Promise<void> => {
+      try {
+        const response = await fetch(url, { method: start ? "POST" : "GET", signal: controller.signal });
+        const payload = await readApiResponse<PedagogicalJob>(response);
+        if (controller.signal.aborted) return;
+        setClassification(payload);
+        if (["queued", "running"].includes(payload.status)) timer = setTimeout(() => void poll(), 2000);
+      } catch (e) {
+        if (!controller.signal.aborted) setClassification({ status: "failed", suggestions: [], error: errorMessage(e) });
+      }
+    };
+    void poll(true);
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [result?.origin.id, analysisAttempt]);
 
   useEffect(() => {
     const reviewId = new URLSearchParams(window.location.search).get("review");
@@ -118,7 +146,7 @@ function App() {
     let cancelled = false;
     void fetch(`/documents/${encodeURIComponent(reviewId)}/review`)
       .then(async (response) => {
-        const payload = await response.json() as UploadResult & { sourceText?: string; error?: string };
+        const payload = await readApiResponse<UploadResult & { sourceText?: string; error?: string }>(response);
         if (!response.ok) throw new Error(payload.error || "Não foi possível carregar a revisão.");
         if (!cancelled) {
           setResult({ ...payload, text: payload.sourceText ?? "", reviewUrl: `/documents/${encodeURIComponent(reviewId)}/review`, sourceUrl: `/documents/${encodeURIComponent(reviewId)}/source` });
@@ -168,13 +196,16 @@ function App() {
     setFeedback(null);
     setResult(null);
     const processingHintTimer = window.setTimeout(() => setShowProcessingHint(true), 5000);
+    const cancellation = new AbortController();
+    uploadCancellation.current = cancellation;
     try {
       const body = new FormData();
       body.append("document", selectedFile);
-      const response = await fetch("/documents", { method: "POST", body });
-      const payload = await response.json() as UploadResult & { error?: string };
+      const response = await fetch("/documents", { method: "POST", body, signal: cancellation.signal });
+      const payload = await readApiResponse<UploadResult & { error?: string }>(response);
       if (!response.ok) throw new Error(payload.error || "Não foi possível enviar o documento.");
 
+      cancellation.signal.throwIfAborted();
       setResult(payload);
       setFeedback({
         message: `${payload.message} Origem registrada: ${payload.origin.fileName}.`,
@@ -183,8 +214,9 @@ function App() {
       setSelectedFile(null);
       if (fileInput.current) fileInput.current.value = "";
     } catch (error) {
-      setFeedback({ message: errorMessage(error), kind: "error" });
+      setFeedback({ message: cancellation.signal.aborted ? "Envio e processamento cancelados." : errorMessage(error), kind: cancellation.signal.aborted ? "warning" : "error" });
     } finally {
+      uploadCancellation.current = null;
       window.clearTimeout(processingHintTimer);
       setBusy(false);
       setShowProcessingHint(false);
@@ -210,8 +242,12 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...questionDraft(question), ...(status ? { status } : {}) }),
       });
-      const payload = await response.json() as { questions?: Question[]; error?: string };
+      const payload = await readApiResponse<{ questions?: Question[]; error?: string }>(response);
       if (!response.ok) throw new Error(payload.error || "Não foi possível salvar a revisão.");
+      const draft = questionDraft(question);
+      if (draft.prompt !== (question.prompt ?? question.text) || JSON.stringify(draft.alternatives) !== JSON.stringify(question.alternatives ?? []) || draft.pedagogy.grade !== question.pedagogy?.grade || draft.pedagogy.discipline !== question.pedagogy?.discipline) {
+        setClassification(current => current ? { ...current, stale: true } : current);
+      }
       if (payload.questions) setResult((current) => current ? { ...current, questions: payload.questions! } : current);
       setQuestionDrafts((current) => { const next = { ...current }; delete next[question.id]; return next; });
       setFeedback({ message: status === "approved" ? "Questão aprovada e salva." : status === "rejected" ? "Questão rejeitada e salva." : status === "pending_review" ? "Questão mantida em revisão." : "Alterações da questão salvas.", kind: "success" });
@@ -286,6 +322,7 @@ function App() {
               {busy ? "Enviando e processando…" : "Enviar material"}
               {!busy && <span aria-hidden="true">→</span>}
             </button>
+            {busy && <button type="button" onClick={() => uploadCancellation.current?.abort()}>Cancelar envio e processamento</button>}
             {busy && showProcessingHint && (
               <p className="processing-hint" role="status" aria-live="polite">
                 Ainda estamos processando seu documento. Arquivos escaneados ou a análise pelo Ollama podem levar alguns minutos; se a IA exceder o limite, a identificação local será usada.
@@ -303,6 +340,39 @@ function App() {
               <div>
                 <p className="card-kicker">ETAPA DE REVISÃO</p>
                 <h2 id="review-title">Questões identificadas</h2>
+                <div role="status" aria-live="polite">
+                  <p>Análise pedagógica: {result.questions.length === 0 ? "Nenhuma questão identificada; IA não será executada" : classification?.status === "cancelled" ? "cancelada" : classification?.status === "completed" ? "concluída — sugestões da IA para conferência" : classification?.status === "failed" ? classification.error : `em andamento (${classification?.suggestions.length ?? 0} classificadas); você já pode revisar as questões`}</p>
+                  {(classification?.status === "running" || classification?.status === "queued") && <button type="button" onClick={async () => {
+                    try {
+                      const response = await fetch(`/documents/${encodeURIComponent(result.origin.id ?? "")}/classification/cancel`, { method: "POST" });
+                      setClassification(await readApiResponse<PedagogicalJob>(response));
+                    } catch (error) { setFeedback({ message: errorMessage(error), kind: "error" }); }
+                  }}>Cancelar análise da IA</button>}
+                  <p>BNCC sugerida pela IA, sem validação em catálogo oficial. Confira a habilidade, a etapa e a pertinência antes de registrá-la.</p>
+                  {classification?.stale && <p>O conteúdo foi alterado após a análise. Solicite uma nova análise.</p>}
+                  <button type="button" disabled={result.questions.length === 0 || classification?.status === "running" || classification?.status === "queued"} onClick={() => setAnalysisAttempt(n => n + 1)}>Analisar novamente</button>
+                  {classification && classification.suggestions.length > 0 && classification.suggestions.map(s => (
+                    <div key={s.questionId}>
+                      <strong>Questão {result.questions.find(q => q.id === s.questionId)?.number ?? result.questions.findIndex(q => q.id === s.questionId) + 1}: {s.area || "Área indeterminada"}</strong>
+                      <p>{s.discipline} · {s.questionType} · Confiança informada pela IA: {s.confidence}</p>
+                      <p>BNCC sugerida: {s.bnccSkills.join(", ") || "Não identificada com segurança"}</p>
+                      <p>{s.rationale}</p>
+                      {s.warnings?.map(w => <p key={w} role="note">{w}</p>)}
+                      <button type="button" disabled={classification.stale || s.confidence === "low"} onClick={() => {
+                        const question = result.questions.find(q => q.id === s.questionId);
+                        if (!question) return;
+                        const draft = questionDraft(question);
+                        const pedagogy = draft.pedagogy;
+                        setQuestionDrafts(current => ({ ...current, [question.id]: { ...draft, pedagogy: {
+                          ...pedagogy, area: pedagogy.area || s.area, questionType: pedagogy.questionType || s.questionType,
+                          discipline: pedagogy.discipline || s.discipline,
+                          bnccSkills: pedagogy.bnccSkills?.length ? pedagogy.bnccSkills : s.bnccSkills,
+                        } } }));
+                        setFeedback({ message: "Sugestão copiada apenas para campos vazios. Confira a BNCC e salve a questão para registrar.", kind: "warning" });
+                      }}>Usar sugestão nos campos vazios</button>
+                    </div>
+                  ))}
+                </div>
                 <p className="review-summary">
                   {result.questionCount === 0
                     ? "O texto foi extraído, mas não encontramos enunciados com segurança suficiente."
@@ -358,7 +428,7 @@ function App() {
                       </details>
                     )}
                     <span className="question-type">
-                      {getResponseTypeLabel(question.responseType)}
+                      {getResponseTypeLabel()}
                     </span>
                     <section className="question-section">
                       <h3>Enunciado</h3>
@@ -370,33 +440,12 @@ function App() {
                     {question.missingComponents?.some((component) => component !== "prompt") && (
                       <p className="question-answer-empty">
                         {question.missingComponents.includes("alternatives") && "Alternativas não identificadas. "}
-                        {question.missingComponents.includes("answer") && "Gabarito/resposta não identificado no documento."}
+                        {question.missingComponents.includes("answer") && "Gabarito não identificado no documento."}
                       </p>
                     )}
                     <section className="question-section">
-                      <h3>{question.alternatives?.length
-                        ? question.responseType === "open"
-                          ? "Itens da questão"
-                          : question.responseType === "mixed" ? "Alternativas e resposta aberta" : "Resposta / alternativas"
-                        : "Resposta"}</h3>
-                      {question.responseType === "mixed" ? (
-                        <>
-                          {question.alternatives && question.alternatives.length > 0 && (
-                            <ul className="question-alternatives">
-                              {question.alternatives.map((alternative, alternativeIndex) => (
-                                <li key={`${alternative.label}-${alternativeIndex}`}>
-                                  <strong>{alternative.label}</strong> {alternative.text}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          <p className="question-text">
-                            {question.answer ? <><strong>Resposta aberta:</strong> {question.answer}</> : getMissingAnswerMessage("open")}
-                          </p>
-                        </>
-                      ) : question.answer ? (
-                        <p className="question-text">{question.answer}</p>
-                      ) : question.alternatives && question.alternatives.length > 0 ? (
+                      <h3>Alternativas</h3>
+                      {question.alternatives && question.alternatives.length > 0 ? (
                         <ul className="question-alternatives">
                           {question.alternatives.map((alternative, alternativeIndex) => (
                             <li key={`${alternative.label}-${alternativeIndex}`}>
@@ -406,7 +455,7 @@ function App() {
                         </ul>
                       ) : (
                         <p className="question-answer-empty">
-                          {getMissingAnswerMessage(question.responseType)}
+                          {getMissingAnswerMessage()}
                         </p>
                       )}
                     </section>
@@ -440,6 +489,8 @@ function App() {
                     {question.answerKey && <p className="question-answer-empty"><strong>Gabarito registrado:</strong> {question.answerKey}</p>}
                     <details className="question-pedagogy">
                       <summary>Classificação pedagógica</summary>
+                      <label className="question-edit-field"><span>Área do conhecimento</span><input value={questionDraft(question).pedagogy.area ?? ""} onChange={event => setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, area: event.currentTarget.value } } }))} /></label>
+                      <label className="question-edit-field"><span>Tipo de questão</span><input value={questionDraft(question).pedagogy.questionType ?? ""} onChange={event => setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, questionType: event.currentTarget.value } } }))} /></label>
                       <div className="pedagogy-fields">
                         <label className="question-edit-field"><span>Disciplina</span><input value={questionDraft(question).pedagogy.discipline ?? ""} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, discipline: event.currentTarget.value } } }))} /></label>
                         <label className="question-edit-field"><span>Ano/série</span><input value={questionDraft(question).pedagogy.grade ?? ""} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, grade: event.currentTarget.value } } }))} /></label>

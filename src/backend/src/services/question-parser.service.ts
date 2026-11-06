@@ -3,7 +3,7 @@ import type { ParsedQuestion } from "./question-assembly.service.js";
 
 function getPageLines(pageText: string): string[] {
   const separatedExplicitLabels = pageText.replace(
-    /(?<!class)\s+(?=Quest(?:ão|ao)\s*(?:n[º°o.]?\s*)?\d{1,3}(?:\s*[:.)-]|\s+))/gi,
+    /(?<!class)(?<!para a)(?<!para)\s+(?=Quest(?:ão|ao)\s*(?:n[º°o.]?\s*)?\d{1,3}(?:\s*[:.)-]|\s+))/gi,
     "\n",
   );
   const lines = separatedExplicitLabels.split(/\r?\n/);

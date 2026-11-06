@@ -1,9 +1,7 @@
 Histórias de Usuário — Mentary
 
 Módulo 1 — Extrator de Questões
-
-HU01 — Enviar documento
-
+US01 — Enviar documento
 Requisito: RF01 — O sistema deve permitir o envio de documentos.
 História:
 Como professor, elaborador ou revisor, quero enviar materiais educacionais para o sistema, para que eles possam ser processados e transformados em questões.
@@ -15,9 +13,7 @@ Critérios de aceitação:
 - Deve registrar a origem do documento.
 - Deve informar ao usuário se o envio foi realizado com sucesso.
 - Deve informar o usuário caso ocorra uma falha no envio.
-
-HU02 — Extrair questões do documento
-
+US02 — Extrair questões do documento
 Requisito: RF02 — O sistema deve processar documentos e identificar questões.
 
 História:
@@ -29,9 +25,7 @@ Critérios de aceitação:
 - Deve separar as questões identificadas.
 - Deve encaminhar as questões para revisão.
 - Deve informar quando não conseguir processar o documento.
-
-HU03 — Identificar elementos da questão
-
+US03 — Identificar elementos da questão
 Requisito: RF03 — O sistema deve identificar enunciado, alternativas e gabarito.
 
 História:
@@ -43,9 +37,7 @@ Critérios de aceitação:
 - Deve identificar o gabarito quando estiver disponível.
 - Deve manter a relação entre enunciado e alternativas.
 - Deve sinalizar informações que não puderam ser identificadas.
-
-HU04 — Preservar elementos visuais
-
+US04 — Preservar elementos visuais
 Requisito: RF04 — O sistema deve preservar imagens, gráficos, tabelas e figuras.
 
 História:
@@ -56,9 +48,7 @@ Critérios de aceitação:
 - Deve manter esses elementos vinculados à questão correspondente.
 - Deve preservar a visualização dos elementos quando possível.
 - Deve sinalizar quando um elemento não puder ser extraído corretamente.
-
-HU05 — Registrar origem da questão
-
+US05 — Registrar origem da questão
 Requisito: RF05 — O sistema deve registrar a origem e a página.
 
 História:
@@ -69,9 +59,7 @@ Critérios de aceitação:
 - Deve registrar a página quando essa informação estiver disponível.
 - Deve manter a informação vinculada à questão.
 - Deve permitir consultar a origem durante a revisão.
-
-HU06 — Revisar questão extraída
-
+US06 — Revisar questão extraída
 Requisito: RF06 — O sistema deve disponibilizar uma interface de revisão.
 
 História:
@@ -83,9 +71,7 @@ Critérios de aceitação:
 - Deve permitir editar os dados da questão.
 - Deve permitir salvar as alterações.
 - Deve indicar o status da revisão.
-
-HU07 — Editar enunciado e alternativas
-
+US07 — Editar enunciado e alternativas
 Requisito: RF07 — O sistema deve permitir editar enunciados e alternativas.
 
 História:
@@ -96,9 +82,7 @@ Critérios de aceitação:
 - Deve permitir alterar as alternativas.
 - Deve permitir salvar as alterações.
 - Deve manter a questão vinculada ao documento de origem.
-
-HU08 — Definir gabarito
-
+US08 — Definir gabarito
 Requisito: RF08 — O sistema deve permitir definir ou corrigir o gabarito.
 
 História:
@@ -109,9 +93,7 @@ Critérios de aceitação:
 - Deve permitir alterar um gabarito previamente identificado.
 - Não deve permitir aprovar uma questão sem gabarito quando ele for obrigatório.
 - Deve salvar o gabarito junto à questão.
-
-HU09 — Classificar questão pedagogicamente
-
+US09 — Classificar questão pedagogicamente
 Requisito: RF09 — O sistema deve permitir associar informações pedagógicas.
 
 História:
@@ -125,9 +107,7 @@ Critérios de aceitação:
 - Deve permitir associar descritor.
 - Deve permitir informar dificuldade.
 - Deve armazenar essas informações junto à questão.
-
-HU10 — Aprovar ou rejeitar questão
-
+US10 — Aprovar ou rejeitar questão
 Requisito: RF10 — O sistema deve permitir aprovar, rejeitar ou manter questões em revisão.
 
 História:
@@ -139,9 +119,7 @@ Critérios de aceitação:
 - Deve permitir manter a questão em revisão.
 - Deve registrar o status atual.
 - Deve registrar o responsável pela aprovação quando aplicável.
-
-HU11 — Integrar questão ao banco
-
+US11 — Integrar questão ao banco
 Requisito: RF11 — O sistema deve enviar questões aprovadas para o banco.
 
 História:
@@ -152,9 +130,7 @@ Critérios de aceitação:
 - A questão deve manter suas informações pedagógicas.
 - A questão deve manter sua origem.
 - O sistema não deve criar uma questão duplicada.
-
-HU12 — Consultar banco de questões
-
+US12 — Consultar banco de questões
 Requisito: RF12 — O sistema deve permitir consultar e selecionar questões.
 
 História:

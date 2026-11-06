@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { parseQuestions } from "../src/services/question-parser.service.js";
 import { QuestionParsingSession } from "../src/services/question-parser-session.service.js";
 
 test("parser session keeps a question open across pages and finalizes its page range", () => {
@@ -27,4 +28,33 @@ test("parser session ignores cover instructions until a real question marker app
   const [question] = session.finish();
   assert.equal(question?.number, 1);
   assert.equal(question?.text, "Explique a ideia principal.");
+});
+
+test("parser session attaches a support passage to the following numbered question", () => {
+  const session = new QuestionParsingSession();
+  session.addLine("Questão 6: A sequência correta é:", 2);
+  session.addLine("A) V - F - V - F B) F - V - V - V", 2);
+  session.addLine("Texto para a questão 7:", 2);
+  session.addLine("Leia o trecho e observe a ideia principal.", 2);
+  session.addLine("Questão 7. No trecho, a que termo se refere?", 2);
+
+  const questions = session.finish();
+  assert.deepEqual(questions.map((question) => question.number), [6, 7]);
+  assert.equal(questions[0]?.text, "A sequência correta é:\nA) V - F - V - F B) F - V - V - V");
+  assert.match(questions[1]?.text ?? "", /Texto para a questão 7:[\s\S]*Leia o trecho/);
+  assert.match(questions[1]?.text ?? "", /No trecho, a que termo se refere/);
+});
+
+test("page text does not split a support reference into the previous question", () => {
+  const questions = parseQuestions([[
+    "Questão 6. A sequência correta é:",
+    "A) V - F - V - F B) F - V - V - V",
+    "Texto para a questão 7:",
+    "Leia o trecho e observe a ideia principal.",
+    "Questão 7. No trecho, a que termo se refere?",
+  ].join("\n")]);
+
+  assert.deepEqual(questions.map((question) => question.number), [6, 7]);
+  assert.doesNotMatch(questions[0]?.text ?? "", /Texto para a/);
+  assert.match(questions[1]?.text ?? "", /Texto para a questão 7:[\s\S]*Leia o trecho/);
 });

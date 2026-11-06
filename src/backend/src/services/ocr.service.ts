@@ -1,5 +1,6 @@
 import { createWorker } from "tesseract.js";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { abortable } from "./cancellation.js";
 
 const MAX_OCR_IMAGE_SIDE = 2_400;
 const MAX_UPSCALE = 2;
@@ -69,12 +70,22 @@ function orderOcrBlocks(blocks: OcrBlock[] | null | undefined): string {
   return ordered.join("\n");
 }
 
-async function recognizeImage(image: Buffer): Promise<string> {
+async function recognizeImage(image: Buffer, signal?: AbortSignal): Promise<string> {
+  signal?.throwIfAborted();
   workerPromise ??= createWorker("por");
-  const worker = await workerPromise;
-  const preparedImage = await prepareImageForOcr(image);
-  const result = await worker.recognize(preparedImage, {}, { text: true, blocks: true });
-  return orderOcrBlocks(result.data.blocks) || result.data.text.trim();
+  const current = workerPromise;
+  const cancel = () => {
+    if (workerPromise === current) workerPromise = undefined;
+    void current.then(worker => worker.terminate()).catch(() => {});
+  };
+  signal?.addEventListener("abort", cancel, { once: true });
+  try {
+    const worker = await abortable(current, signal);
+    const preparedImage = await abortable(prepareImageForOcr(image), signal);
+    signal?.throwIfAborted();
+    const result = await abortable(worker.recognize(preparedImage, {}, { text: true, blocks: true }), signal);
+    return orderOcrBlocks(result.data.blocks) || result.data.text.trim();
+  } finally { signal?.removeEventListener("abort", cancel); }
 }
 
 export { orderOcrBlocks, prepareImageForOcr, recognizeImage };

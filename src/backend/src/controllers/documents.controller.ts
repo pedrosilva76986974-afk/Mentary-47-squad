@@ -3,7 +3,7 @@ import { extractDocument } from "../services/document-extraction.service.js";
 import { getStoredDocument, recordDocumentOrigin, removeDocumentOrigin } from "../services/document-origin.service.js";
 import { validateDocument } from "../services/document-validation.service.js";
 import { identifyQuestionsDetailed } from "../services/question-identification.service.js";
-import { getReviewResult, saveReviewResult, updateReviewQuestion, type ReviewResult } from "../services/review-results.service.js";
+import { getReviewResult, saveReviewResult, removeReviewResult, updateReviewQuestion, type ReviewResult } from "../services/review-results.service.js";
 
 async function uploadAndExtract(req: Request, res: Response, next: NextFunction): Promise<void> {
   const file = req.file;
@@ -12,13 +12,21 @@ async function uploadAndExtract(req: Request, res: Response, next: NextFunction)
     return;
   }
 
+  const cancellation = new AbortController();
+  const onClose = () => { if (!res.writableEnded) cancellation.abort(); };
+  res.on("close", onClose);
+  let createdId: string | undefined;
   try {
+    cancellation.signal.throwIfAborted();
     await validateDocument(file);
+    cancellation.signal.throwIfAborted();
     const extractionStartedAt = Date.now();
-    const result = await extractDocument(file.buffer, file.mimetype);
+    const result = await extractDocument(file.buffer, file.mimetype, undefined, cancellation.signal);
     const extractionDurationMs = Date.now() - extractionStartedAt;
     const identification = await identifyQuestionsDetailed(result.pageTexts);
+    cancellation.signal.throwIfAborted();
     const origin = await recordDocumentOrigin(file);
+    createdId = origin.id;
     let review: ReviewResult;
     try {
       review = await saveReviewResult(origin, result, identification.questions, {
@@ -33,6 +41,7 @@ async function uploadAndExtract(req: Request, res: Response, next: NextFunction)
       }
       throw error;
     }
+    cancellation.signal.throwIfAborted();
     res.status(200).json({
       status: review.status,
       message: review.message,
@@ -47,7 +56,16 @@ async function uploadAndExtract(req: Request, res: Response, next: NextFunction)
       reviewUrl: `/documents/${origin.id}/review`,
     });
   } catch (error) {
+    if (cancellation.signal.aborted) {
+      if (createdId) {
+        await removeReviewResult(createdId).catch(e => console.error("Falha ao desfazer revisão cancelada.", e));
+        await removeDocumentOrigin(createdId).catch(e => console.error("Falha ao desfazer origem cancelada.", e));
+      }
+      return;
+    }
     next(error);
+  } finally {
+    res.off("close", onClose);
   }
 }
 

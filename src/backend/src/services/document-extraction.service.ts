@@ -2,6 +2,7 @@ import { createCanvas } from "@napi-rs/canvas";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { MAX_PDF_PAGES, standardFontDataUrl } from "./pdf-config.js";
 import { recognizeImage } from "./ocr.service.js";
+import { abortable } from "./cancellation.js";
 
 const MIN_DIGITAL_TEXT_LENGTH = 40;
 
@@ -15,7 +16,7 @@ type ExtractionResult = {
 
 type VisualPageReference = { page: number; kind: "image" | "graphic" };
 
-type ImageRecognizer = (image: Buffer) => Promise<string>;
+type ImageRecognizer = (image: Buffer, signal?: AbortSignal) => Promise<string>;
 
 type PdfTextItem = { str: string; hasEOL?: boolean; transform?: number[]; width?: number; height?: number };
 type PositionedLine = { text: string; y: number; left: number; right: number };
@@ -27,7 +28,7 @@ function artifactKey(text: string): string {
 }
 
 function findRepeatedPageArtifacts(pages: PageTextContent[]): Set<string> {
-  if (pages.length < 3) return new Set();
+  if (pages.length < 2) return new Set();
   const pageCounts = new Map<string, number>();
   pages.forEach(({ items, height, yMin }) => {
     const keys = new Set<string>();
@@ -46,6 +47,23 @@ function findRepeatedPageArtifacts(pages: PageTextContent[]): Set<string> {
   return new Set([...pageCounts].filter(([, count]) => count >= minimumPageCount).map(([key]) => key));
 }
 
+function findDecorativeBadgeItems(items: unknown[], pageWidth: number): Set<unknown> {
+  const positioned = items.flatMap((item) => {
+    if (typeof item !== "object" || item === null || !("str" in item)) return [];
+    const textItem = item as PdfTextItem;
+    const text = textItem.str.trim();
+    const x = textItem.transform?.[4];
+    const y = textItem.transform?.[5];
+    const height = Math.abs(textItem.height ?? textItem.transform?.[3] ?? 0);
+    if (!text || x === undefined || y === undefined) return [];
+    return [{ item, text, x, y, height }];
+  });
+  const leftAnchors = positioned.filter(({ x, height }) => x < pageWidth * 0.4 && height >= 8.5);
+  return new Set(positioned.filter(({ x, y, height, text }) =>
+    x > pageWidth * 0.6 && height > 0 && height < 8.5 && text.length < 100
+    && leftAnchors.some((anchor) => Math.abs(anchor.y - y) <= 3.5)).map(({ item }) => item));
+}
+
 function isRepeatedWatermark(text: string, height: number): boolean {
   if (height > 3.5) return false;
   const compact = text.replace(/\s+/g, "");
@@ -54,7 +72,9 @@ function isRepeatedWatermark(text: string, height: number): boolean {
 }
 
 function getPositionedLines(items: unknown[], pageWidth: number, repeatedArtifacts: Set<string>): PositionedLine[] {
+  const decorativeBadges = findDecorativeBadgeItems(items, pageWidth);
   const positionedItems = items.flatMap((item): Array<{ text: string; x: number; y: number; width: number; height: number }> => {
+    if (decorativeBadges.has(item)) return [];
     if (typeof item !== "object" || item === null || !("str" in item)) return [];
     const textItem = item as PdfTextItem;
     const text = textItem.str.trim();
@@ -80,7 +100,13 @@ function getPositionedLines(items: unknown[], pageWidth: number, repeatedArtifac
     let parts: typeof row = [];
     const flushPart = (): void => {
       if (parts.length === 0) return;
-      const text = parts.map((part) => part.text).join(" ").replace(/[ \t]+/g, " ").trim();
+      const text = parts.reduce((joined, part, index) => {
+        if (index === 0) return part.text;
+        const previous = parts[index - 1]!;
+        const gap = part.x - (previous.x + previous.width);
+        const spaceThreshold = Math.max(1.5, Math.min(previous.height, part.height) * 0.15);
+        return `${joined}${gap > spaceThreshold ? " " : ""}${part.text}`;
+      }, "").replace(/[ \t]+/g, " ").trim();
       if (text) lines.push({ text, y: parts.reduce((sum, part) => sum + part.y, 0) / parts.length,
         left: Math.min(...parts.map((part) => part.x)),
         right: Math.max(...parts.map((part) => part.x + part.width)) });
@@ -137,8 +163,27 @@ function reconstructColumnOrder(lines: PositionedLine[], split: number, pageWidt
   return ordered;
 }
 
+function groupAlignedRows(lines: PositionedLine[]): PositionedLine[][] {
+  const rows: PositionedLine[][] = [];
+  for (const line of lines) {
+    const row = rows.find((candidate) => Math.abs((candidate[0]?.y ?? line.y) - line.y) <= 2.5);
+    if (row) row.push(line);
+    else rows.push([line]);
+  }
+  return rows;
+}
+
 function groupPageText(items: unknown[], pageWidth: number, repeatedArtifacts = new Set<string>()): string {
   const lines = getPositionedLines(items, pageWidth, repeatedArtifacts);
+  const alignedRows = groupAlignedRows(lines);
+  const gridRows = alignedRows.filter((row) => {
+    const columns = row.slice().sort((left, right) => left.left - right.left);
+    return columns.length >= 3 && columns.slice(1).every((column, index) =>
+      column.left - (columns[index]?.right ?? column.left) > pageWidth * 0.1);
+  });
+  if (gridRows.length >= 3) {
+    return alignedRows.map((row) => row.sort((left, right) => left.left - right.left).map((line) => line.text).join(" | ")).join("\n");
+  }
   const columnSplit = findColumnSplit(lines, pageWidth);
   const ordered = columnSplit === undefined
     ? lines.map((line) => line.text)
@@ -169,10 +214,11 @@ async function detectPageVisuals(page: pdfjs.PDFPageProxy): Promise<VisualPageRe
   return pathCount >= 3 ? "graphic" : undefined;
 }
 
-async function extractPdf(buffer: Buffer, recognize: ImageRecognizer): Promise<ExtractionResult> {
+async function extractPdf(buffer: Buffer, recognize: ImageRecognizer, signal?: AbortSignal): Promise<ExtractionResult> {
+  signal?.throwIfAborted();
   const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer), standardFontDataUrl });
   try {
-    const pdf = await loadingTask.promise;
+    const pdf = await abortable(loadingTask.promise, signal);
     if (pdf.numPages > MAX_PDF_PAGES) {
       throw new Error(`O PDF pode ter no máximo ${MAX_PDF_PAGES} páginas neste MVP.`);
     }
@@ -181,6 +227,7 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer): Promise<E
     const pages = [];
     const visualPages: VisualPageReference[] = [];
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      signal?.throwIfAborted();
       const page = await pdf.getPage(pageNumber);
       pages.push(page);
       const content = await page.getTextContent();
@@ -194,6 +241,7 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer): Promise<E
     let digitalPageCount = 0;
     let ocrPageCount = 0;
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      signal?.throwIfAborted();
       const page = pages[pageNumber - 1]!;
       const { items, width } = pageContents[pageNumber - 1]!;
       const digitalPageText = groupPageText(items, width, repeatedArtifacts);
@@ -206,8 +254,13 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer): Promise<E
       const viewport = page.getViewport({ scale: 1.6 });
       const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const context = canvas.getContext("2d");
-      await page.render({ canvas: canvas as never, canvasContext: context as never, viewport }).promise;
-      const imageText = (await recognize(canvas.toBuffer("image/png"))).trim();
+      const render = page.render({ canvas: canvas as never, canvasContext: context as never, viewport });
+      const cancelRender = () => render.cancel();
+      signal?.addEventListener("abort", cancelRender, { once: true });
+      try { await abortable(render.promise, signal); }
+      finally { signal?.removeEventListener("abort", cancelRender); }
+      signal?.throwIfAborted();
+      const imageText = (await abortable(recognize(canvas.toBuffer("image/png"), signal), signal)).trim();
       pageTexts.push(imageText || digitalPageText);
       ocrPageCount += 1;
     }
@@ -223,11 +276,13 @@ async function extractDocument(
   buffer: Buffer,
   mimeType: string,
   recognize: ImageRecognizer = recognizeImage,
+  signal?: AbortSignal,
 ): Promise<ExtractionResult> {
-  if (mimeType === "application/pdf") return extractPdf(buffer, recognize);
-  const text = await recognize(buffer);
+  signal?.throwIfAborted();
+  if (mimeType === "application/pdf") return extractPdf(buffer, recognize, signal);
+  const text = await abortable(recognize(buffer, signal), signal);
   return { text, pageTexts: [text], pages: 1, method: "ocr", visualPages: [{ page: 1, kind: "image" }] };
 }
 
-export { extractDocument };
+export { extractDocument, groupPageText };
 export type { ExtractionResult, VisualPageReference };

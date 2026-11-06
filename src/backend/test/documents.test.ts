@@ -54,7 +54,7 @@ test("GET / serves the built React frontend", { skip: !existsSync(new URL("../pu
 });
 
 test("POST /documents extracts text from a digital PDF", async () => {
-  const expectedText = "Questão 1: Quanto é 2 + 2? Questão 2: Quanto é 3 + 3?";
+  const expectedText = "Questão 1: Quanto é 2 + 2? A) 3 B) 4 Questão 2: Quanto é 3 + 3? A) 5 B) 6";
   const response = await request(app)
     .post("/documents")
     .attach("document", await createPdf(expectedText), {
@@ -109,7 +109,11 @@ test("PATCH review question saves edits, answer key, and review status", async (
       prompt: "Quanto é 2 + 2? (revisto)",
       alternatives: [{ label: "A", text: "3" }, { label: "B", text: "4" }],
       answerKey: "B",
-      pedagogy: { discipline: "Matemática", grade: "8º ano", topic: "Adição", bnccSkills: ["EF08MA01"], descriptor: "D1", difficulty: "easy" },
+      pedagogy: {
+        discipline: "Matemática", area: "Matemática", questionType: "Múltipla escolha", grade: "8º ano", topic: "Adição", bnccSkills: ["EF08MA01"], descriptor: "D1", difficulty: "easy",
+        userId: "11111111-1111-4111-8111-111111111111",
+        institutionId: "22222222-2222-4222-8222-222222222222",
+      },
       status: "approved",
       reviewedBy: "Professora Ana",
     });
@@ -120,12 +124,15 @@ test("PATCH review question saves edits, answer key, and review status", async (
   assert.equal(update.body.questions[0].status, "approved");
   assert.equal(update.body.questions[0].reviewedBy, "Professora Ana");
   assert.deepEqual(update.body.questions[0].pedagogy.bnccSkills, ["EF08MA01"]);
+  assert.equal(update.body.questions[0].pedagogy.userId, "11111111-1111-4111-8111-111111111111");
 
   const persisted = await request(app).get(upload.body.reviewUrl);
   assert.equal(persisted.body.questions[0].alternatives[1].text, "4");
   assert.equal(persisted.body.questions[0].answerKey, "B");
   assert.equal(persisted.body.questions[0].status, "approved");
   assert.equal(persisted.body.questions[0].pedagogy.discipline, "Matemática");
+  assert.equal(persisted.body.questions[0].pedagogy.area, "Matemática");
+  assert.equal(persisted.body.questions[0].pedagogy.questionType, "Múltipla escolha");
 });
 
 test("PATCH review question rejects approval of multiple choice without an answer key", async () => {
@@ -143,6 +150,23 @@ test("PATCH review question rejects approval of multiple choice without an answe
 
   assert.equal(update.status, 400);
   assert.match(update.body.error, /Defina o gabarito/);
+});
+
+test("review rejects malformed destination ownership UUIDs", async () => {
+  const upload = await request(app)
+    .post("/documents")
+    .attach("document", await createPdf("Questão 1: Quanto é 2 + 2? A) 3 B) 4"), {
+      filename: "invalid-owner-id.pdf",
+      contentType: "application/pdf",
+    });
+  const question = upload.body.questions[0] as { id: string };
+
+  const update = await request(app)
+    .patch(`/documents/${upload.body.origin.id}/review/questions/${question.id}`)
+    .send({ pedagogy: { userId: "not-a-uuid" } });
+
+  assert.equal(update.status, 400);
+  assert.match(update.body.error, /UUID válido/);
 });
 
 test("review requires a reviewer and a valid alternative before approval, and can reopen the question", async () => {
@@ -185,6 +209,32 @@ test("review requires a reviewer and a valid alternative before approval, and ca
   const reopened = await request(app).patch(reviewUrl).send({ status: "pending_review" });
   assert.equal(reopened.status, 200);
   assert.equal(reopened.body.questions[0].status, "pending_review");
+});
+
+test("approved questions cannot lose required fields through a partial update", async () => {
+  const upload = await request(app).post("/documents")
+    .attach("document", await createPdf("Questão 1: Quanto é 2 + 2? A) 3 B) 4"), {
+      filename: "approval-integrity.pdf", contentType: "application/pdf",
+    });
+  assert.equal(upload.status, 200);
+  const url = `${upload.body.reviewUrl}/questions/${upload.body.questions[0].id}`;
+  const approved = await request(app).patch(url).send({ answerKey: "B", reviewedBy: "Revisor de teste", status: "approved" });
+  assert.equal(approved.status, 200);
+  for (const update of [
+    { answerKey: null }, { answerKey: "Z" }, { reviewedBy: null }, { prompt: " " },
+    { alternatives: [] },
+    { alternatives: [{ label: "A", text: "3" }, { label: "B", text: " " }] },
+    { alternatives: [{ label: "B", text: "3" }, { label: "b", text: "4" }] },
+  ]) {
+    const rejected = await request(app).patch(url).send(update);
+    assert.equal(rejected.status, 400, JSON.stringify(update));
+    const persisted = await request(app).get(upload.body.reviewUrl);
+    assert.deepEqual(persisted.body.questions[0], approved.body.questions[0]);
+  }
+  const reopened = await request(app).patch(url).send({ status: "pending_review", answerKey: null });
+  assert.equal(reopened.status, 200);
+  assert.equal(reopened.body.questions[0].status, "pending_review");
+  assert.ok(reopened.body.questions[0].missingComponents.includes("answer"));
 });
 
 test("POST /documents rejects unsupported file types", async () => {
@@ -253,6 +303,39 @@ test("POST /documents stores an empty review result when no questions are found"
   assert.equal(review.status, 200);
   assert.equal(review.body.status, "no_questions");
   assert.deepEqual(review.body.questions, []);
+});
+
+test("keeps an objective question with unreadable alternatives flagged for manual review", async () => {
+  const upload = await request(app)
+    .post("/documents")
+    .attach("document", await createPdf("Questão 1: Marque a alternativa correta sobre fotossíntese."), {
+      filename: "incomplete-objective-question.pdf",
+      contentType: "application/pdf",
+    });
+  assert.equal(upload.status, 200);
+  assert.equal(upload.body.questionCount, 1);
+  assert.ok(upload.body.questions[0].missingComponents.includes("alternatives"));
+
+  const approval = await request(app)
+    .patch(`/documents/${upload.body.origin.id}/review/questions/${upload.body.questions[0].id}`)
+    .send({ answerKey: "A", reviewedBy: "Professora Ana", status: "approved" });
+  assert.equal(approval.status, 400);
+  assert.match(approval.body.error, /pelo menos duas alternativas/);
+});
+
+test("upload preserves numbered candidates with missing choices for later review", async () => {
+  const upload = await request(app).post("/documents")
+    .attach("document", await createPdf("Questão 1: Qual é a capital do Brasil?"), {
+      filename: "missing-choices.pdf", contentType: "application/pdf",
+    });
+  assert.equal(upload.status, 200);
+  assert.equal(upload.body.questionCount, 1);
+  const review = await request(app).get(upload.body.reviewUrl);
+  assert.equal(review.status, 200);
+  assert.match(review.body.questions[0].prompt, /capital do Brasil/);
+  assert.equal(review.body.questions[0].status, "pending_review");
+  assert.ok(review.body.questions[0].missingComponents.includes("alternatives"));
+  assert.ok(review.body.questions[0].missingComponents.includes("answer"));
 });
 
 test("document validation accepts real PNG and JPEG images", async () => {

@@ -1,59 +1,39 @@
 import type { ParsedQuestion } from "./question-parser.service.js";
-import { containsCode, separateQuestionAnswer } from "./question-content.service.js";
 import { extractQuestionAlternatives } from "./question-alternatives.service.js";
 
 function structureQuestion(question: ParsedQuestion, sourceQuestion: ParsedQuestion = question): ParsedQuestion {
-  const sourceText = sourceQuestion.text;
-  const sourceHasCode = containsCode(sourceText);
-  const sourceSeparated = separateQuestionAnswer(sourceText);
-  const modelSeparated = separateQuestionAnswer(question.text);
-  const answer = sourceSeparated.answer ?? modelSeparated.answer ?? question.answer;
-  const prompt = sourceHasCode || sourceSeparated.answer
-    ? sourceSeparated.prompt
-    : question.prompt !== undefined ? question.prompt.trim() : sourceSeparated.prompt;
-  const content = { ...question, text: sourceHasCode ? sourceText : question.text, prompt, answer };
-  let optionSource = sourceHasCode || sourceSeparated.answer ? sourceSeparated.prompt : modelSeparated.prompt;
-  if (answer) {
-    const answerStart = optionSource.lastIndexOf(answer);
-    if (answerStart > 0) optionSource = optionSource.slice(0, answerStart).trimEnd();
-  }
+  const prompt = question.prompt !== undefined ? question.prompt.trim() : sourceQuestion.text.trim();
+  const content = { ...question, text: sourceQuestion.text, prompt };
+  const optionSource = question.text;
   const { prompt: promptWithoutAlternatives, alternatives } = extractQuestionAlternatives(
     optionSource,
     content.prompt,
     question.alternatives,
   );
-  const isSubquestionList = isExerciseList(alternatives);
-  const isOpenExercise = /\b(?:resolva|resolver|calcule|calcular)\s+(?:as|os|cada|a|o)?\s*(?:equações?|questões?|itens?)\b|\bdetermine\s+(?:o valor|a raiz)\b.*\bequação\b/i.test(content.prompt)
-    && !/\b(assinale|marque|alternativa|opção|opcao)\b/i.test(content.prompt);
-  const requestsWrittenJustification = /\b(justifique|explique|descreva|demonstre|fundamente|argumente|comente|desenvolva|apresente)\b/i.test(content.prompt);
-  const isMixedExercise = question.responseType === "mixed"
-    || (alternatives.length > 0 && !isSubquestionList && requestsWrittenJustification);
-  const responseType = isSubquestionList
-    ? "open"
-    : isMixedExercise
-      ? "mixed"
-      : isOpenExercise
-        ? "open"
-        : alternatives.length > 0
-          ? "multiple_choice"
-          : question.responseType ?? "open";
   const result: ParsedQuestion = {
     ...content,
     prompt: promptWithoutAlternatives || content.prompt,
-    responseType,
+    responseType: "multiple_choice",
     alternatives,
   };
   result.missingComponents = [
     ...(!result.prompt?.trim() ? ["prompt" as const] : []),
-    ...(result.responseType !== "open" && alternatives.length === 0 ? ["alternatives" as const] : []),
-    ...(!result.answer?.trim() ? ["answer" as const] : []),
+    ...(alternatives.length < 2 ? ["alternatives" as const] : []),
+    ...(!result.answerKey?.trim() ? ["answer" as const] : []),
   ];
   return result;
 }
 
-function isExerciseList(alternatives: Array<{ label: string }>): boolean {
-  return alternatives.length >= 7
-    && alternatives.every((alternative, index) => alternative.label === String.fromCharCode(65 + index));
+function isObjectiveQuestion(question: ParsedQuestion): boolean {
+  const prompt = question.prompt ?? question.text;
+  const explicitlyObjective = /\b(?:assinale|marque|escolha|selecione|indique)\b.{0,80}\b(?:alternativa|opção|opcao|correta|incorreta)|\b(?:alternativa|opção|opcao)\s+(?:correta|incorreta)\b/i.test(prompt);
+  const exerciseList = /\b(?:resolva|resolver|calcule|calcular)\s+(?:(?:as|os|cada|a|o)\s+)?(?:(?:seguintes|abaixo|propostas)\s+)?(?:equações?|questões?|itens?)\b|\bdetermine\s+(?:o valor|a raiz)\b.*\bequação\b/i.test(prompt)
+    && !explicitlyObjective;
+  const explicitlyDiscursive = /^\s*(?:explique|descreva|discorra|disserte|redija|escreva|justifique|demonstre|prove)\b/i.test(prompt);
+  // A numbered candidate with damaged choices cannot safely be classified as
+  // discursive just because OCR did not recover its alternatives.
+  const incompleteCandidate = question.number !== null && !explicitlyDiscursive;
+  return !exerciseList && (explicitlyObjective || (question.alternatives?.length ?? 0) >= 2 || incompleteCandidate);
 }
 
-export { isExerciseList, structureQuestion };
+export { isObjectiveQuestion, structureQuestion };

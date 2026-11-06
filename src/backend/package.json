@@ -4,10 +4,10 @@
   "description": "",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "node --env-file=../../.env --import tsx --watch src/server.ts",
     "build": "tsc",
     "test": "tsx --test test/*.test.ts",
-    "start": "node dist/server.js"
+    "start": "node --env-file=../../.env dist/server.js"
   },
   "keywords": [],
   "author": "",
@@ -17,6 +17,7 @@
     "@types/express": "^5.0.6",
     "@types/multer": "^2.2.0",
     "@types/node": "^26.5.1",
+    "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
     "pdf-lib": "^1.17.1",
     "supertest": "^7.3.0",
@@ -28,6 +29,7 @@
     "express": "^5.2.1",
     "multer": "^2.4.0",
     "pdfjs-dist": "^6.3.289",
+    "pg": "^8.23.1",
     "tesseract.js": "^7.0.0"
   }
 }
