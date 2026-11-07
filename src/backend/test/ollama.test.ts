@@ -8,7 +8,7 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { identifyQuestionsDetailed } from "../src/services/question-identification.service.js";
 import { saveReviewResult } from "../src/services/review-results.service.js";
-import { classifyPedagogy } from "../src/services/ollama.service.js";
+import { classifyPedagogy, areaForDiscipline } from "../src/services/ollama.service.js";
 
 const suggestion = { questionIndex: 0, area: "Matemática", discipline: "Matemática", questionType: "Múltipla escolha", grade: "1º ano", topic: "Adição", descriptor: "Somar números naturais", difficulty: "easy", bnccSkills: ["EF01MA08"], rationale: "Adição de números naturais; conferir etapa.", confidence: "medium" };
 function response(value: unknown) { return new Response(JSON.stringify({ message: { content: JSON.stringify(value) } }), { status: 200 }); }
@@ -57,7 +57,7 @@ test("post-extraction pedagogical classification lifecycle", async t => {
       await writeFile(file, JSON.stringify(old));
       globalThis.fetch = async () => response({ suggestions: [suggestion] });
       await request(app).post(url);
-      const job = await done(url); assert.equal(job.version, 4);
+      const job = await done(url); assert.equal(job.version, 6);
       assert.equal("bnccSkills" in job.suggestions[0], false);
     });
     await t.test("classifies one question at a time, retries timeout and resumes partial results", async () => {
@@ -68,14 +68,19 @@ test("post-extraction pedagogical classification lifecycle", async t => {
         count++;
         const body = JSON.parse(String(init?.body));
         assert.equal(JSON.parse(body.messages[1].content).length, 1);
-        if (count === 1) throw new DOMException("Timed out", "TimeoutError");
+        if (count === 1) { await new Promise(resolve => setTimeout(resolve, 15)); throw new DOMException("Timed out", "TimeoutError"); }
         if (count === 3) return new Response("Unavailable", { status: 503 });
         return response({ suggestions: [suggestion] });
       };
       const partialUrl = "/documents/" + partialId + "/classification";
+      process.env.OLLAMA_TARGET_MS = "1";
       await request(app).post(partialUrl);
       const failed = await done(partialUrl); assert.equal(failed.status, "failed"); assert.equal(failed.suggestions.length, 1);
-      await request(app).patch("/documents/" + partialId + "/review/questions/" + failed.suggestions[0].questionId).send({ pedagogy: { discipline: suggestion.discipline, grade: suggestion.grade } });
+      assert.ok(failed.suggestions[0].processingMs >= 15, "Timing must include the failed attempt");
+      assert.equal(failed.suggestions[0].targetMet, false);
+      assert.equal(failed.suggestions[0].targetMs, 1);
+      delete process.env.OLLAMA_TARGET_MS;
+      await request(app).patch("/documents/" + partialId + "/review/questions/" + failed.suggestions[0].questionId).send({ pedagogy: { discipline: failed.suggestions[0].discipline, grade: failed.suggestions[0].grade } });
       assert.equal((await request(app).get(partialUrl)).body.stale, false, "Accepting AI fields must preserve pending classifications");
       await request(app).post(partialUrl);
       const resumed = await done(partialUrl); assert.equal(resumed.status, "completed"); assert.equal(resumed.suggestions.length, 2);
@@ -110,7 +115,7 @@ test("post-extraction pedagogical classification lifecycle", async t => {
       globalThis.fetch = async (_url, init) => {
         const body = JSON.parse(String(init?.body));
         assert.equal(body.think, false);
-        assert.deepEqual(Object.keys(body.format.properties.suggestions.items.properties), ["questionIndex", "area", "discipline", "questionType", "grade", "topic", "descriptor", "difficulty"]);
+        assert.deepEqual(Object.keys(body.format.properties.suggestions.items.properties), ["questionIndex", "discipline", "grade", "topic", "descriptor", "difficulty"]);
         return response({ suggestions: [{ ...suggestion, bnccSkills: ["(EM13MAT02) Descrição inventada", "(EF01MA08) Descrição da habilidade"] }] });
       };
       const [result] = await classifyPedagogy(parsed.questions);
@@ -118,9 +123,31 @@ test("post-extraction pedagogical classification lifecycle", async t => {
       assert.equal(result!.questionType, "Múltipla escolha");
       assert.equal("bnccSkills" in result!, false);
       assert.equal(result!.descriptor, "Somar números naturais");
+      assert.equal(result!.grade, "", "The model cannot invent a grade absent from the question");
       assert.equal(result!.difficulty, "easy");
       assert.equal("rationale" in result!, false);
       assert.equal("confidence" in result!, false);
+    });
+    await t.test("fast profile limits only model context, preserves human grade and measures budget", async () => {
+      const original = { ...parsed.questions[0]!, prompt: "Início " + "x".repeat(7000) + " final?", pedagogy: { grade: "1º ano" } };
+      globalThis.fetch = async (_url, init) => {
+        const body = JSON.parse(String(init?.body));
+        assert.equal(body.options.num_ctx, 2048); assert.equal(body.options.num_gpu, 16); assert.equal(body.options.num_predict, 192);
+        const input = JSON.parse(body.messages[1].content)[0];
+        assert.ok(input.prompt.length < 2100); assert.ok(input.prompt.endsWith("final?"));
+        await new Promise(resolve => setTimeout(resolve, 5));
+        return response({ suggestions: [{ ...suggestion, grade: "9º ano", area: "Área inventada" }] });
+      };
+      process.env.OLLAMA_TARGET_MS = "1"; process.env.OLLAMA_NUM_GPU = "16";
+      const [result] = await classifyPedagogy([original]);
+      delete process.env.OLLAMA_TARGET_MS; delete process.env.OLLAMA_NUM_GPU;
+      assert.equal(result!.grade, "1º ano"); assert.equal(result!.area, "Matemática");
+      assert.ok(result!.processingMs! >= 5); assert.equal(result!.targetMet, false);
+      assert.equal(original.prompt.length, 7014);
+    });
+    await t.test("truncated model output reports a clear classification error", async () => {
+      globalThis.fetch = async () => new Response(JSON.stringify({ message: { content: '{"q":[' } }));
+      await assert.rejects(classifyPedagogy(parsed.questions), /Classificação incompleta/);
     });
     await t.test("cancel aborts pending Ollama request and supports retry", async () => {
       let aborted = false;
@@ -175,4 +202,12 @@ test("post-extraction pedagogical classification lifecycle", async t => {
     Object.assign(process.env, previous);
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("area mapping normalizes accents and preserves uncertainty", () => {
+  assert.equal(areaForDiscipline(" FÍSICA "), "Ciências da Natureza");
+  assert.equal(areaForDiscipline("Língua Portuguesa"), "Linguagens");
+  assert.equal(areaForDiscipline("História"), "Ciências Humanas");
+  assert.equal(areaForDiscipline("Informática"), "Computação");
+  assert.equal(areaForDiscipline("Disciplina desconhecida"), "");
 });

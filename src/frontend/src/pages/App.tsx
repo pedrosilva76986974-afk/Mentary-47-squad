@@ -63,7 +63,7 @@ type UploadResult = {
 };
 
 type Feedback = { message: string; kind: "success" | "warning" | "error" };
-type PedagogicalJob = { version?: number; sourceHash?: string; status: "queued" | "running" | "completed" | "failed" | "cancelled"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; grade: string; topic: string; descriptor: string; difficulty: "easy" | "medium" | "hard" | "unknown" }> };
+type PedagogicalJob = { version?: number; sourceHash?: string; status: "queued" | "running" | "completed" | "failed" | "cancelled"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; grade: string; topic: string; descriptor: string; difficulty: "easy" | "medium" | "hard" | "unknown"; processingMs?: number; targetMs?: number; targetMet?: boolean }> };
 
 /** Checks the file's extension, browser MIME type, size, and real file signature before upload. */
 async function validateFile(file: File): Promise<void> {
@@ -125,7 +125,7 @@ function App() {
   const [analysisAttempt, setAnalysisAttempt] = useState(0);
   const appliedClassifications = useRef(new Set<string>());
   useEffect(() => {
-    if (!result || !classification || classification.stale || classification.version !== 4) return;
+    if (!result || !classification || classification.stale || classification.version !== 6) return;
     const pending = classification.suggestions.filter(s => !appliedClassifications.current.has(`${result.origin.id}:${classification.sourceHash}:${s.questionId}`));
     if (!pending.length) return;
     pending.forEach(s => appliedClassifications.current.add(`${result.origin.id}:${classification.sourceHash}:${s.questionId}`));
@@ -154,7 +154,7 @@ function App() {
         const response = await fetch(url, { method: start ? "POST" : "GET", signal: controller.signal });
         if (!start && response.status === 404) { await poll(true); return; }
         const payload = await readApiResponse<PedagogicalJob>(response);
-        if (!start && ["completed", "failed"].includes(payload.status) && payload.version !== 4) { await poll(true); return; }
+        if (!start && ["completed", "failed"].includes(payload.status) && payload.version !== 6) { await poll(true); return; }
         if (controller.signal.aborted) return;
         setClassification(payload);
         if (["queued", "running"].includes(payload.status)) timer = setTimeout(() => void poll(), 2000);
@@ -499,6 +499,7 @@ function App() {
                         <button type="button" disabled={result.questions.length === 0 || classification?.status === "running" || classification?.status === "queued"} onClick={() => setAnalysisAttempt(n => n + 1)}>Classificar novamente</button>
                     </div></div>
 
+                      {classification?.suggestions.filter(s => s.questionId === question.id && s.processingMs !== undefined).map(s => <p className="classification-timing" key={s.questionId}>Tempo de classificação: {(s.processingMs! / 1000).toFixed(1)} s · {s.targetMet ? "Dentro" : "Acima"} da meta de {(s.targetMs ?? 15000) / 1000} s</p>)}
                       <p className="editor-help">A IA preenche os campos vazios. Confira os dados e salve. BNCC não é preenchida automaticamente.</p>
                       <label className="question-edit-field"><span>Área do conhecimento</span><input value={questionDraft(question).pedagogy.area ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, area: value } } })); }} /></label>
                       <label className="question-edit-field"><span>Tipo de questão</span><input value={questionDraft(question).pedagogy.questionType ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, questionType: value } } })); }} /></label>

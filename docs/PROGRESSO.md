@@ -182,3 +182,16 @@ Nenhum deploy, alteração de credenciais, reset de banco ou remoção de dados 
 - O modelo local excedeu 90s no teste real. Limite padrão por chamada ajustado para 300s (configurável por OLLAMA_TIMEOUT_MS), com instrução e saída menores. Isso evita interrupção prematura, mas não garante baixa latência; processamento continua fora do upload.
 
 Validação final: as duas questões do documento simulado foram preenchidas pelo Qwen local, com status Concluída dentro da ficha. Primeira salva enquanto a segunda ainda processava; segunda preenchida em seguida. Suíte final após as correções: 100 passaram, 1 integração opcional ignorada, zero falhas (101 testes). Builds dos dois projetos aprovados. Latência real próxima de três minutos por questão neste ambiente; melhoria de fluxo não equivale a garantia de rapidez do modelo.
+
+## 2026-11-07 — Meta de 15 segundos por classificação
+
+- Perfil final neste Dell G15: qwen3.5:2b, OLLAMA_NUM_GPU=16, contexto 2048, saída máxima de 192 tokens por questão. Configuração local aplicada sem alterar credenciais. Valores de exemplo publicados em .env.example.
+- IA retorna disciplina, série explícita, tema, descritor e dificuldade; backend associa áreas conhecidas e define múltipla escolha. Contexto reduzido somente na chamada de classificação, preservando a extração original. BNCC continua manual.
+- Benchmark reproduzível: npm run benchmark:classification -- qwen3.5:2b, executado em src/backend. Faz aquecimento, cinco áreas, verifica campos e retorna erro quando a amostra não atende a meta. Não equivale a avaliação pedagógica completa.
+- Resultado final da amostra: 5/5 abaixo de 15s e 5/5 nas verificações básicas; p50 4974ms, p95 5390ms, intervalo 4886–5390ms. Registro: docs/benchmarks/qwen3_5_2b-fast-gpu16.json.
+- Alternativas menores foram rápidas mas produziram classificações ruins; 0.8B e 1.5B não foram escolhidos. Relatórios dos experimentos foram preservados. Ensaios interrompidos de candidatos lentos não contam como benchmarks completos.
+- Primeiro teste de tela usou um servidor antigo na porta 3000, ainda com 4B. Instâncias duplicadas deste backend foram encerradas e uma única instância iniciada com o perfil correto. Corrigido o log de inicialização para não anunciar disponibilidade quando a porta está ocupada.
+- Em seguida foi observada chamada de 23,7s com o 4B antigo ainda residente. Após liberar esse modelo, uma nova questão sem resultado em cache completou em 4941ms no 2B, com campos preenchidos e indicação Dentro da meta de 15s na tela. Limite não é SLA: carregamento, fila, pressão de memória e complexidade podem elevar o tempo.
+- Métrica por questão inclui retentativa automática; fila e consulta do navegador ficam fora do orçamento. Teste de regressão verifica que o tempo da tentativa malsucedida não é ocultado. Cache v6 impede reutilização do perfil antigo.
+
+Validação final: suíte completa com 104 testes (103 aprovados, 1 integração PostgreSQL opcional ignorada), sem falhas; builds backend/frontend aprovados. Após o ajuste final da métrica configurável, os 15 testes focados passaram. Meta exibida agora usa o valor configurado e inclui tentativas malsucedidas. Estado final local: apenas uma instância deste backend atendendo a porta 3000, com configuração qwen3.5:2b/16 camadas.

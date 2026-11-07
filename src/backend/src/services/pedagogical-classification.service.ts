@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
 import { resolve } from "node:path";
 import { randomUUID, createHash } from "node:crypto";
-import { classifyPedagogy, type PedagogicalSuggestion } from "./ollama.service.js";
+import { performance } from "node:perf_hooks";
+import { classifyPedagogy, classificationTargetMs, type PedagogicalSuggestion } from "./ollama.service.js";
 import { getReviewResult } from "./review-results.service.js";
 import { DocumentValidationError } from "./document-validation.service.js";
 export type ClassificationJob = { version?: number; source?: ReturnType<typeof snapshot>; documentId: string; status: "queued" | "running" | "completed" | "failed" | "cancelled"; model: string; updatedAt: string; sourceHash: string; suggestions: Array<PedagogicalSuggestion & { questionId: string }>; error?: string; owner: string };
@@ -47,12 +48,12 @@ export async function startClassification(id: string): Promise<ClassificationJob
   const existing = await getClassification(id);
   const unchanged = existing && !(await classificationIsStale(id, existing));
   const sourceHash = unchanged ? existing.sourceHash : hash(snapshot(review.questions));
-  if (active.has(id) || (existing?.version === 4 && existing?.status === "completed" && existing.sourceHash === sourceHash && existing.model === process.env.OLLAMA_MODEL)) return existing;
+  if (active.has(id) || (existing?.version === 6 && existing?.status === "completed" && existing.sourceHash === sourceHash && existing.model === process.env.OLLAMA_MODEL)) return existing;
   if (!process.env.OLLAMA_MODEL) throw new DocumentValidationError("Configure OLLAMA_MODEL para analisar as questões.");
   if (active.size >= 20) throw new DocumentValidationError("Fila de análise cheia. Tente novamente mais tarde.");
   // Check again after asynchronous reads to deduplicate simultaneous starts.
   if (active.has(id)) return structuredClone(active.get(id)!);
-  const job: ClassificationJob = { version: 4, source: unchanged ? existing.source ?? snapshot(review.questions) : snapshot(review.questions), documentId: id, status: "queued", model: process.env.OLLAMA_MODEL, updatedAt: new Date().toISOString(), sourceHash, suggestions: existing?.version === 4 && existing.sourceHash === sourceHash && existing.model === process.env.OLLAMA_MODEL ? existing.suggestions : [], owner };
+  const job: ClassificationJob = { version: 6, source: unchanged ? existing.source ?? snapshot(review.questions) : snapshot(review.questions), documentId: id, status: "queued", model: process.env.OLLAMA_MODEL, updatedAt: new Date().toISOString(), sourceHash, suggestions: existing?.version === 6 && existing.sourceHash === sourceHash && existing.model === process.env.OLLAMA_MODEL ? existing.suggestions : [], owner };
   const cancellation = new AbortController();
   cancellations.set(id, cancellation);
   active.set(id, job);
@@ -65,6 +66,7 @@ export async function startClassification(id: string): Promise<ClassificationJob
         const questions = review.questions.slice(offset, offset + 1);
         cancellation.signal.throwIfAborted();
         // Save each question immediately so a slow item cannot discard prior results.
+        const started = performance.now();
         let suggestions;
         try { suggestions = await classifyPedagogy(questions, cancellation.signal); }
         catch (error) {
@@ -72,7 +74,8 @@ export async function startClassification(id: string): Promise<ClassificationJob
           suggestions = await classifyPedagogy(questions, cancellation.signal);
         }
         cancellation.signal.throwIfAborted();
-        job.suggestions.push(...suggestions.map(s => ({ ...s, questionIndex: s.questionIndex + offset, questionId: questions[s.questionIndex]!.id })));
+        const processingMs = Math.round(performance.now() - started);
+        job.suggestions.push(...suggestions.map(s => ({ ...s, processingMs, targetMs: classificationTargetMs(), targetMet: processingMs <= classificationTargetMs(), questionIndex: s.questionIndex + offset, questionId: questions[s.questionIndex]!.id })));
         job.updatedAt = new Date().toISOString();
         await save(job);
       }

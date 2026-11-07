@@ -104,14 +104,16 @@ Configure no ambiente do backend:
 
 ```env
 OLLAMA_BASE_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=qwen3.5:4b
+OLLAMA_MODEL=qwen3.5:2b
+OLLAMA_NUM_GPU=16
+OLLAMA_TARGET_MS=15000
 OLLAMA_TIMEOUT_MS=300000
 OLLAMA_KEEP_ALIVE=15m
 ```
 
-Baixe o modelo com `ollama pull qwen3.5:4b` e mantenha o Ollama aberto. `QUESTION_IDENTIFIER` não controla mais a análise: a extração é sempre local e a análise pedagógica é iniciada pela rota posterior.
+Baixe o modelo com `ollama pull qwen3.5:2b` e mantenha o Ollama aberto. `QUESTION_IDENTIFIER` não controla mais a análise: a extração é sempre local e a análise pedagógica é iniciada pela rota posterior.
 
-A IA preenche diretamente área do conhecimento, disciplina, tipo de questão, tema, descritor e dificuldade estimada, sem produzir resolução, justificativa ou nota de confiança. Ano/série só é preenchido quando informado, sem inferir a série pelo assunto. A IA não solicita, retorna nem preenche habilidades BNCC; o campo manual fica reservado para futura integração com fonte oficial.
+O modelo identifica disciplina, tema, descritor e dificuldade estimada, sem produzir resolução, justificativa ou nota de confiança. O backend define múltipla escolha e associa disciplinas conhecidas às áreas; áreas sem mapeamento ficam vazias para revisão. Ano/série só é preenchido quando informado. BNCC continua disponível somente para preenchimento manual ou futura integração oficial.
 
 Após a extração, a classificação roda em segundo plano, uma questão por chamada, com progresso salvo a cada resultado. Timeouts têm uma nova tentativa automática; ao tentar novamente após falha, o processamento retoma as questões pendentes do mesmo conteúdo/modelo. O status, o cancelamento e a tentativa manual ficam dentro de **Classificação pedagógica**. Conforme os resultados chegam, a tela preenche automaticamente os campos pedagógicos vazios, preservando os dados informados pelo revisor. Os valores permanecem como alterações não salvas até a confirmação em **Salvar alterações**. Todos os campos pedagógicos podem ser editados manualmente. Dificuldade é uma estimativa do modelo e deve ser conferida. Texto, alternativas, gabarito e status não são modificados pela IA. Resultados antigos são recalculados no novo formato.
 
@@ -121,7 +123,23 @@ API posterior ao upload:
 - `GET /documents/{id}/classification`: retorna estado, sugestões e indicação de conteúdo alterado desde a análise.
 - Estados: `queued`, `running`, `completed`, `failed`. A tela permite tentar novamente após falha.
 
-A fila executa uma análise de cada vez em lotes de cinco questões, com até vinte documentos ativos. Resultados e estados são persistidos em `src/backend/uploads/classifications` (ou `MENTARY_CLASSIFICATION_DIRECTORY`). Esse diretório precisa ser incluído no backup junto aos uploads. Processos interrompidos são sinalizados ao consultar a análise e podem ser repetidos; a fila não retoma sozinha após reinício. Esta implementação é para uma instância do backend, sem coordenação entre vários servidores. Falhas da IA não impedem upload nem revisão. O processamento local ainda compete pelos recursos da máquina enquanto a IA está ativa.
+A fila executa uma análise de cada vez, com uma questão por chamada e até vinte documentos ativos. Resultados e estados são persistidos em `src/backend/uploads/classifications` (ou `MENTARY_CLASSIFICATION_DIRECTORY`). Esse diretório precisa ser incluído no backup junto aos uploads. Processos interrompidos são sinalizados ao consultar a análise e podem ser repetidos; a fila não retoma sozinha após reinício. Esta implementação é para uma instância do backend, sem coordenação entre vários servidores. Falhas da IA não impedem upload nem revisão. O processamento local ainda compete pelos recursos da máquina enquanto a IA está ativa.
+
+## Meta de desempenho da classificação
+
+A meta é **até 15 segundos por questão**, da chamada local ao Ollama até o JSON validado. Não é um timeout de 15 segundos nem uma garantia de atendimento. Espera na fila e até dois segundos de consulta da tela ficam fora dessa medida. O carregamento inicial é registrado no aquecimento do benchmark e pode afetar o primeiro resultado na aplicação.
+
+O perfil usa contexto de 2048 tokens, saída reduzida de até 192 tokens por questão e descrições curtas. Trechos são limitados apenas na entrada da IA; o texto extraído original é preservado. A tela mostra o tempo medido e se ficou dentro da meta.
+
+O ajuste de 16 camadas na GPU foi medido neste Dell G15 para deixar memória livre. Em outro computador, compare com o modo automático removendo OLLAMA_NUM_GPU. É uma configuração de hardware, não uma garantia universal de velocidade. O modelo continua local; nenhuma chave de API é necessária.
+
+Para comparar modelos já instalados, execute em `src/backend`:
+
+```powershell
+npm run benchmark:classification -- qwen3.5:2b
+```
+
+O benchmark faz aquecimento e testa cinco exemplos sintéticos de Matemática, História, Português, Biologia e Informática. Salva os resultados em `docs/benchmarks` e retorna erro se algum exemplo ultrapassar a meta ou falhar na verificação básica dos campos. A amostra é pequena e não comprova precisão em todos os documentos. Tema, descritor e dificuldade ainda precisam de revisão humana. `OLLAMA_TARGET_MS` configura a meta registrada pela API; o benchmark deste piloto usa 15000 ms.
 
 ## Compilar e verificar o projeto
 

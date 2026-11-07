@@ -21,7 +21,10 @@ async function startServer(): Promise<void> {
   await runRetentionCleanup();
   const cleanupTimer = setInterval(() => void runRetentionCleanup(), 24 * 60 * 60 * 1000);
   cleanupTimer.unref();
-  app.listen(port, () => console.log(`Mentary backend disponível em http://localhost:${port}`));
+  app.listen(port, (error?: Error) => {
+    if (error) { console.error("Não foi possível iniciar o backend. Confira se a porta já está em uso:", error.message); process.exitCode = 1; return; }
+    console.log(`Mentary backend disponível em http://localhost:${port}`);
+  });
 }
 
 void startServer();
