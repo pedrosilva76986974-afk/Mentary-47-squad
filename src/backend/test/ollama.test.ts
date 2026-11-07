@@ -57,8 +57,29 @@ test("post-extraction pedagogical classification lifecycle", async t => {
       await writeFile(file, JSON.stringify(old));
       globalThis.fetch = async () => response({ suggestions: [suggestion] });
       await request(app).post(url);
-      const job = await done(url); assert.equal(job.version, 3);
+      const job = await done(url); assert.equal(job.version, 4);
       assert.equal("bnccSkills" in job.suggestions[0], false);
+    });
+    await t.test("classifies one question at a time, retries timeout and resumes partial results", async () => {
+      const partialId = randomUUID();
+      await saveReviewResult({ id: partialId, fileName: "partial.pdf", mimeType: "application/pdf", size: 10, sha256: "test", uploadedAt: new Date().toISOString() }, { pages: 1, method: "pdf-text", text: "test", pageTexts: ["test"] }, [...parsed.questions, ...parsed.questions]);
+      let count = 0;
+      globalThis.fetch = async (_input, init) => {
+        count++;
+        const body = JSON.parse(String(init?.body));
+        assert.equal(JSON.parse(body.messages[1].content).length, 1);
+        if (count === 1) throw new DOMException("Timed out", "TimeoutError");
+        if (count === 3) return new Response("Unavailable", { status: 503 });
+        return response({ suggestions: [suggestion] });
+      };
+      const partialUrl = "/documents/" + partialId + "/classification";
+      await request(app).post(partialUrl);
+      const failed = await done(partialUrl); assert.equal(failed.status, "failed"); assert.equal(failed.suggestions.length, 1);
+      await request(app).patch("/documents/" + partialId + "/review/questions/" + failed.suggestions[0].questionId).send({ pedagogy: { discipline: suggestion.discipline, grade: suggestion.grade } });
+      assert.equal((await request(app).get(partialUrl)).body.stale, false, "Accepting AI fields must preserve pending classifications");
+      await request(app).post(partialUrl);
+      const resumed = await done(partialUrl); assert.equal(resumed.status, "completed"); assert.equal(resumed.suggestions.length, 2);
+      assert.equal(count, 4); assert.notEqual(resumed.suggestions[0].questionId, resumed.suggestions[1].questionId);
     });
     await t.test("flags changed content and records failures for retry", async () => {
       await request(app).patch(`/documents/${id}/review/questions/${id}-q1`).send({ prompt: "Quanto é 3 + 3?" });
@@ -68,8 +89,8 @@ test("post-extraction pedagogical classification lifecycle", async t => {
       assert.equal((await done(url)).status, "failed");
       globalThis.fetch = async () => response({ suggestions: [suggestion] });
       await request(app).post(url); assert.equal((await done(url)).status, "completed");
-      await request(app).patch(`/documents/${id}/review/questions/${id}-q1`).send({ pedagogy: { grade: "1º ano" } });
-      assert.equal((await request(app).get(url)).body.stale, true, "Grade changes must invalidate BNCC suggestions");
+      await request(app).patch(`/documents/${id}/review/questions/${id}-q1`).send({ pedagogy: { grade: "2º ano" } });
+      assert.equal((await request(app).get(url)).body.stale, true, "A human grade change must invalidate the classification");
     });
     await t.test("persisted unfinished jobs from another process become retryable failures", async () => {
       const file = join(directory, "jobs", `${id}.json`);

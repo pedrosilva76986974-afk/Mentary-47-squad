@@ -105,7 +105,7 @@ Configure no ambiente do backend:
 ```env
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=qwen3.5:4b
-OLLAMA_TIMEOUT_MS=90000
+OLLAMA_TIMEOUT_MS=300000
 OLLAMA_KEEP_ALIVE=15m
 ```
 
@@ -113,7 +113,7 @@ Baixe o modelo com `ollama pull qwen3.5:4b` e mantenha o Ollama aberto. `QUESTIO
 
 A IA preenche diretamente área do conhecimento, disciplina, tipo de questão, tema, descritor e dificuldade estimada, sem produzir resolução, justificativa ou nota de confiança. Ano/série só é preenchido quando informado, sem inferir a série pelo assunto. A IA não solicita, retorna nem preenche habilidades BNCC; o campo manual fica reservado para futura integração com fonte oficial.
 
-Após a extração, a classificação roda em segundo plano. Conforme os resultados chegam, a tela preenche automaticamente os campos pedagógicos vazios, preservando os dados informados pelo revisor. Os valores permanecem como alterações não salvas até a confirmação em **Salvar alterações**. Todos os campos pedagógicos podem ser editados manualmente. Dificuldade é uma estimativa do modelo e deve ser conferida. Texto, alternativas, gabarito e status não são modificados pela IA. Resultados antigos são recalculados no novo formato.
+Após a extração, a classificação roda em segundo plano, uma questão por chamada, com progresso salvo a cada resultado. Timeouts têm uma nova tentativa automática; ao tentar novamente após falha, o processamento retoma as questões pendentes do mesmo conteúdo/modelo. O status, o cancelamento e a tentativa manual ficam dentro de **Classificação pedagógica**. Conforme os resultados chegam, a tela preenche automaticamente os campos pedagógicos vazios, preservando os dados informados pelo revisor. Os valores permanecem como alterações não salvas até a confirmação em **Salvar alterações**. Todos os campos pedagógicos podem ser editados manualmente. Dificuldade é uma estimativa do modelo e deve ser conferida. Texto, alternativas, gabarito e status não são modificados pela IA. Resultados antigos são recalculados no novo formato.
 
 API posterior ao upload:
 

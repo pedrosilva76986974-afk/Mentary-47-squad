@@ -265,9 +265,6 @@ footer span { color: var(--electric-blue); font-size: 11px; font-weight: 900; }
 .has-review .review-count { display:none; }
 .has-review .review-summary { color:#6c657d; font-size:12px; }
 .has-review .analysis-toolbar { margin:16px 0 10px; padding:12px 16px; border:1px solid #ddd5ee; background:#faf8ff; }
-.analysis-toolbar > summary { display:flex; align-items:center; gap:12px; justify-content:space-between; cursor:pointer; color:#493679; font-size:13px; font-weight:700; }
-.analysis-toolbar > summary span { font-size:11px; padding:3px 8px; border-radius:20px; background:#eee8fa; }
-.analysis-toolbar[open] > div { padding-top:14px; font-size:12px; }
 .has-review .identification-diagnostic { padding:0; border:0; color:#655e77; font-size:12px; margin-top:10px; box-shadow:none; }
 .has-review .identification-diagnostic strong { color:#51416e; }
 .has-review .feedback { margin:12px 24px; }
@@ -331,3 +328,6 @@ footer span { color: var(--electric-blue); font-size: 11px; font-weight: 900; }
 .remove-alternative { background:transparent; border:0; color:#963c4d; cursor:pointer; padding:6px; font:inherit; border-radius:5px; }
 .remove-alternative:hover { background:#fff0f2; }
 .add-alternative { padding:11px 15px; border:1px solid #cfc1e6; border-radius:8px; color:#53358f; background:#f2ebfc; cursor:pointer; font:inherit; font-size:13px; font-weight:600; }
+
+.classification-state { display:inline-block; color:#493679; font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px; background:#eee8fa; }
+.question-pedagogy .analysis-toolbar { font-size:12px; line-height:1.6; border-radius:8px; padding:10px; }

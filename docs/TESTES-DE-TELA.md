@@ -39,3 +39,9 @@ Teste assistido em navegador local, com teste-interface-simulado.pdf (duas quest
 ## 2026-11-07 — Edição compacta e classificação v3
 
 Documento simulado com duas questões. Editor exibiu letra e texto lado a lado; texto alterado e restaurado, Tab funcionou. Qwen local concluiu e preencheu Matemática, múltipla escolha, tema adição, descritor textual e dificuldade fácil na primeira questão. Ano/série e BNCC permaneceram vazios, sem cartão duplicado. Gabarito B e status aprovado preservados. Formulário sinalizou alterações não salvas. Rótulos dos controles e foco visível verificados. Não representa validação da precisão pedagógica em todas as áreas.
+
+## 2026-11-07 — Status dentro da ficha e fluxo incremental
+
+Teste simulado em navegador com Qwen3.5:4b local e duas questões de matemática. Removido o bloco de classificação do topo; status e controles observados dentro de Classificação pedagógica. Primeira questão recebeu Matemática, Múltipla escolha, tema Operações básicas, descritor textual e dificuldade Fácil enquanto a segunda estava pendente. BNCC e série ficaram vazias. Salvar alterações confirmou a gravação sem interromper a fila; navegação para a segunda questão preservou o andamento. O modelo levou aproximadamente três minutos para a primeira resposta neste ambiente; não é garantia de desempenho. Teste realizado pelo agente, sem participantes humanos.
+
+Resultado final do navegador: segunda questão concluída pelo Qwen, com área Matemática, tipo Múltipla escolha, disciplina Matemática, tema Adição de números inteiros, descritor Realizar adições simples de números inteiros e dificuldade Fácil. BNCC e série permaneceram vazias. Primeira questão salva durante o processamento, segunda preenchida posteriormente; status Concluída observado dentro da ficha pedagógica. Suíte final: 101 testes, 100 passaram e 1 integração opcional ignorada; builds backend e frontend aprovados.

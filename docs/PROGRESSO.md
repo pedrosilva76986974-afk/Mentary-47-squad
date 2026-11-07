@@ -168,3 +168,17 @@ Nenhum deploy, alteração de credenciais, reset de banco ou remoção de dados 
 - Validação: suíte completa com 99 testes (98 passaram, 1 integração opcional PostgreSQL ignorada); após acrescentar regressão de cache antigo, os 11 testes focados passaram. Builds backend/frontend passaram.
 - Navegador local e Qwen real: campos preenchidos, série/BNCC vazias, gabarito/status preservados; edição e Tab verificados com documento simulado. Nenhum teste com usuários humanos realizado.
 - Limitação: dificuldade é estimativa; descritor é descrição textual, sem validação oficial. Dados precisam ser conferidos e salvos pelo revisor.
+
+## 2026-11-07 — Status integrado e timeout incremental
+
+- Status, cancelamento e nova tentativa movidos para dentro da classificação pedagógica, junto dos campos. Banner separado removido.
+- Ollama recebe uma questão por chamada, com entrada e saída limitadas. Cada resultado é salvo e mostrado imediatamente.
+- Timeout tem uma nova tentativa; cancelamento interrompe também essa tentativa. Retry manual retoma o prefixo já classificado do mesmo conteúdo/modelo e preserva resultados parciais. Erro de timeout agora em português.
+- Cache v4 evita reutilização do fluxo anterior. Falhas de versão anterior também iniciam automaticamente o novo processamento na tela.
+- Suíte: 101 testes, 100 passaram e uma integração opcional PostgreSQL ignorada, sem falhas. Teste adicional simula timeout, resposta parcial, falha e retomada sem repetir questões concluídas.
+
+- Durante a validação foi reproduzido EPERM intermitente ao cancelar no Windows. Gravações do mesmo documento agora são serializadas, com retentativas curtas apenas para locks transitórios.
+- Salvar valores preenchidos pela IA não invalida as demais questões pendentes; alterações humanas de conteúdo, disciplina ou série continuam invalidando quando diferem da classificação aceita.
+- O modelo local excedeu 90s no teste real. Limite padrão por chamada ajustado para 300s (configurável por OLLAMA_TIMEOUT_MS), com instrução e saída menores. Isso evita interrupção prematura, mas não garante baixa latência; processamento continua fora do upload.
+
+Validação final: as duas questões do documento simulado foram preenchidas pelo Qwen local, com status Concluída dentro da ficha. Primeira salva enquanto a segunda ainda processava; segunda preenchida em seguida. Suíte final após as correções: 100 passaram, 1 integração opcional ignorada, zero falhas (101 testes). Builds dos dois projetos aprovados. Latência real próxima de três minutos por questão neste ambiente; melhoria de fluxo não equivale a garantia de rapidez do modelo.
