@@ -149,3 +149,13 @@ A opção `--test-force-exit` encerra o processo após os testes. Não foi demon
 6. **Infraestrutura:** configurar lint dedicado, identificar recursos que mantêm os testes abertos e acrescentar testes reais de migração/persistência em banco isolado.
 
 Nenhum deploy, alteração de credenciais, reset de banco ou remoção de dados de usuário foi realizado.
+
+## 2026-11-07 — Classificação pedagógica direta
+
+- Ollama retorna somente área, disciplina, tipo e BNCC, sem justificativa, resolução ou confiança. Pensamento desativado e saída limitada.
+- Classificação continua após a extração, em segundo plano. A tela preenche os campos vazios sem substituir dados humanos; salvar confirma os valores.
+- Cache versionado para recalcular respostas do formato anterior.
+- Validação: 98 testes, 97 passaram, 1 integração PostgreSQL ignorada pelo controle opcional; zero falhas. A primeira execução restrita encontrou impedimentos de arquivos/conexões; a execução com acesso local passou.
+- Teste real com qwen3.5:4b retornou os campos esperados em aproximadamente 15 segundos para um exemplo. Não representa garantia de latência nem de acurácia BNCC.
+- Tela validada com documento simulado: classificação concluída, campos preenchidos, alterações não salvas sinalizadas e gabarito/status preservados. Não houve estudo com usuários humanos.
+- Limitação: validação BNCC verifica formato, não existência ou pertinência em catálogo oficial.

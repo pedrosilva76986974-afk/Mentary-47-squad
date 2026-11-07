@@ -111,9 +111,9 @@ OLLAMA_KEEP_ALIVE=15m
 
 Baixe o modelo com `ollama pull qwen3.5:4b` e mantenha o Ollama aberto. `QUESTION_IDENTIFIER` não controla mais a análise: a extração é sempre local e a análise pedagógica é iniciada pela rota posterior.
 
-A IA sugere área do conhecimento, disciplina, tipo de questão, códigos BNCC e uma justificativa, com confiança declarada pelo próprio modelo. Os códigos são verificados quanto ao formato, sem consulta a catálogo oficial. Portanto, sua existência e pertinência precisam de conferência humana. Referência: [BNCC oficial](https://basenacionalcomum.mec.gov.br/).
+A IA classifica diretamente área do conhecimento, disciplina, tipo de questão e códigos BNCC, sem produzir resolução, justificativa ou nota de confiança. Os códigos são verificados quanto ao formato, sem consulta a catálogo oficial. Portanto, sua existência e pertinência precisam de conferência humana. Referência: [BNCC oficial](https://basenacionalcomum.mec.gov.br/).
 
-Sugestões ficam separadas dos metadados confirmados. A tela permite copiar sugestões de confiança média/alta apenas para campos vazios; o revisor deve conferir e salvar a questão. Confiança baixa não permite cópia rápida. Área e tipo também podem ser editados manualmente. Texto, alternativas, gabarito e status não são modificados pela IA.
+Após a extração, a classificação roda em segundo plano. Conforme os resultados chegam, a tela preenche automaticamente os campos pedagógicos vazios, preservando os dados informados pelo revisor. Os valores permanecem como alterações não salvas até a confirmação em **Salvar alterações**. Área, disciplina, tipo e BNCC também podem ser editados manualmente. Texto, alternativas, gabarito e status não são modificados pela IA. Resultados antigos são recalculados no novo formato.
 
 API posterior ao upload:
 

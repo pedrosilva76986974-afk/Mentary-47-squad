@@ -76,12 +76,19 @@ test("post-extraction pedagogical classification lifecycle", async t => {
       assert.equal((await request(app).post(`/documents/${randomUUID()}/classification`)).status, 404);
     });
     await t.test("bad BNCC cannot discard valid area and question type", async () => {
-      globalThis.fetch = async () => response({ suggestions: [{ ...suggestion, bnccSkills: ["(EM13MAT02) Descrição inventada", "(EF01MA08) Descrição da habilidade"] }] });
+      globalThis.fetch = async (_url, init) => {
+        const body = JSON.parse(String(init?.body));
+        assert.equal(body.think, false);
+        assert.deepEqual(Object.keys(body.format.properties.suggestions.items.properties), ["questionIndex", "area", "discipline", "questionType", "bnccSkills"]);
+        return response({ suggestions: [{ ...suggestion, bnccSkills: ["(EM13MAT02) Descrição inventada", "(EF01MA08) Descrição da habilidade"] }] });
+      };
       const [result] = await classifyPedagogy(parsed.questions);
       assert.equal(result!.area, "Matemática");
       assert.equal(result!.questionType, "Múltipla escolha");
       assert.deepEqual(result!.bnccSkills, ["EF01MA08"]);
       assert.ok(result!.warnings?.length);
+      assert.equal("rationale" in result!, false);
+      assert.equal("confidence" in result!, false);
     });
     await t.test("cancel aborts pending Ollama request and supports retry", async () => {
       let aborted = false;

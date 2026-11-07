@@ -1,3 +1,4 @@
+import { fillEmptyPedagogy } from "../utils/pedagogy-filling.js";
 import { QuestionContentEditor } from "../components/QuestionContentEditor.js";
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 import { getMissingAnswerMessage, getResponseTypeLabel } from "../utils/question-presentation.js";
@@ -62,7 +63,7 @@ type UploadResult = {
 };
 
 type Feedback = { message: string; kind: "success" | "warning" | "error" };
-type PedagogicalJob = { status: "queued" | "running" | "completed" | "failed" | "cancelled"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; bnccSkills: string[]; rationale: string; confidence: string; warnings?: string[] }> };
+type PedagogicalJob = { version?: number; sourceHash?: string; status: "queued" | "running" | "completed" | "failed" | "cancelled"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; bnccSkills: string[]; warnings?: string[] }> };
 
 /** Checks the file's extension, browser MIME type, size, and real file signature before upload. */
 async function validateFile(file: File): Promise<void> {
@@ -122,6 +123,25 @@ function App() {
   const [savingQuestion, setSavingQuestion] = useState<string | null>(null);
   const [classification, setClassification] = useState<PedagogicalJob | null>(null);
   const [analysisAttempt, setAnalysisAttempt] = useState(0);
+  const appliedClassifications = useRef(new Set<string>());
+  useEffect(() => {
+    if (!result || !classification || classification.stale || classification.version !== 2) return;
+    const pending = classification.suggestions.filter(s => !appliedClassifications.current.has(`${result.origin.id}:${classification.sourceHash}:${s.questionId}`));
+    if (!pending.length) return;
+    pending.forEach(s => appliedClassifications.current.add(`${result.origin.id}:${classification.sourceHash}:${s.questionId}`));
+    setQuestionDrafts(current => {
+      const next = { ...current };
+      for (const suggestion of pending) {
+        const question = result.questions.find(q => q.id === suggestion.questionId);
+        if (!question) continue;
+        const draft = current[question.id] ?? { prompt: question.prompt ?? question.text, alternatives: question.alternatives ?? [], answerKey: question.answerKey ?? null, pedagogy: question.pedagogy ?? {}, reviewedBy: question.reviewedBy ?? "" };
+        if (draft.prompt !== (question.prompt ?? question.text) || JSON.stringify(draft.alternatives) !== JSON.stringify(question.alternatives ?? []) || draft.pedagogy.grade !== question.pedagogy?.grade || draft.pedagogy.discipline !== question.pedagogy?.discipline) continue;
+        next[question.id] = { ...draft, pedagogy: fillEmptyPedagogy(draft.pedagogy, suggestion) };
+      }
+      return next;
+    });
+  }, [classification, result]);
+
   useEffect(() => {
     const id = result?.origin.id;
     setClassification(null);
@@ -134,6 +154,7 @@ function App() {
         const response = await fetch(url, { method: start ? "POST" : "GET", signal: controller.signal });
         if (!start && response.status === 404) { await poll(true); return; }
         const payload = await readApiResponse<PedagogicalJob>(response);
+        if (!start && payload.status === "completed" && payload.version !== 2) { await poll(true); return; }
         if (controller.signal.aborted) return;
         setClassification(payload);
         if (["queued", "running"].includes(payload.status)) timer = setTimeout(() => void poll(), 2000);
@@ -348,17 +369,17 @@ function App() {
                 <p className="document-name">{result.origin.fileName}</p>
                 <div className="review-progress"><span>{result.questions.filter(q => q.status === "approved").length} aprovadas</span><span>{result.questions.filter(q => q.status === "pending_review").length} em revisão</span><span>{result.questions.filter(q => q.status === "rejected").length} rejeitadas</span></div>
                 <button className="new-document-button" type="button" onClick={() => setShowUpload(v => !v)}>{showUpload ? "Fechar envio" : "Enviar outro documento"}</button>
-                <details className="analysis-toolbar"><summary>Análise pedagógica por IA <span>{classification?.status === "completed" ? "Concluída" : classification?.status === "failed" ? "Precisa de atenção" : classification?.status === "cancelled" ? "Cancelada" : "Em andamento"}</span></summary><div role="status" aria-live="polite">
-                  <p>Análise pedagógica: {result.questions.length === 0 ? "Nenhuma questão identificada; IA não será executada" : classification?.status === "cancelled" ? "cancelada" : classification?.status === "completed" ? "concluída — sugestões da IA para conferência" : classification?.status === "failed" ? classification.error : `em andamento (${classification?.suggestions.length ?? 0} classificadas); você já pode revisar as questões`}</p>
+                <details className="analysis-toolbar"><summary>Classificação automática <span>{classification?.status === "completed" ? "Concluída" : classification?.status === "failed" ? "Precisa de atenção" : classification?.status === "cancelled" ? "Cancelada" : "Em andamento"}</span></summary><div role="status" aria-live="polite">
+                  <p>Classificação: {result.questions.length === 0 ? "Nenhuma questão identificada; IA não será executada" : classification?.status === "cancelled" ? "cancelada" : classification?.status === "completed" ? "concluída" : classification?.status === "failed" ? classification.error : `em andamento (${classification?.suggestions.length ?? 0} classificadas); você já pode revisar as questões`}</p>
                   {(classification?.status === "running" || classification?.status === "queued") && <button type="button" onClick={async () => {
                     try {
                       const response = await fetch(`/documents/${encodeURIComponent(result.origin.id ?? "")}/classification/cancel`, { method: "POST" });
                       setClassification(await readApiResponse<PedagogicalJob>(response));
                     } catch (error) { setFeedback({ message: errorMessage(error), kind: "error" }); }
-                  }}>Cancelar análise da IA</button>}
+                  }}>Cancelar classificação</button>}
                   <p>BNCC sugerida pela IA, sem validação em catálogo oficial. Confira a habilidade, a etapa e a pertinência antes de registrá-la.</p>
                   {classification?.stale && <p>O conteúdo foi alterado após a análise. Solicite uma nova análise.</p>}
-                  <button type="button" disabled={result.questions.length === 0 || classification?.status === "running" || classification?.status === "queued"} onClick={() => setAnalysisAttempt(n => n + 1)}>Analisar novamente</button>
+                  <button type="button" disabled={result.questions.length === 0 || classification?.status === "running" || classification?.status === "queued"} onClick={() => setAnalysisAttempt(n => n + 1)}>Classificar novamente</button>
               </div></details>
                 <p className="review-summary">
                   {result.questionCount === 0
@@ -462,24 +483,12 @@ function App() {
                     </div><aside className="question-inspector" aria-label="Revisão e classificação">
                     <h3>03 · Gabarito e revisão</h3>
                   {classification && classification.suggestions.length > 0 && classification.suggestions.filter(s => s.questionId === question.id).map(s => (
-                    <aside className="ai-suggestion" key={s.questionId} aria-label="Sugestão da IA para esta questão">
+                    <aside className="ai-suggestion" key={s.questionId} aria-label="Classificação automática desta questão">
                       <strong>Questão {result.questions.find(q => q.id === s.questionId)?.number ?? result.questions.findIndex(q => q.id === s.questionId) + 1}: {s.area || "Área indeterminada"}</strong>
-                      <p>{s.discipline} · {s.questionType} · Confiança da sugestão: {s.confidence === "high" ? "alta" : s.confidence === "medium" ? "média" : "baixa"}</p>
-                      <p>BNCC sugerida: {s.bnccSkills.join(", ") || "Não identificada com segurança"}</p>
-                      <details className="suggestion-rationale"><summary>Entender esta sugestão</summary><p>{s.rationale}</p></details>
+                      <p>{s.discipline} · {s.questionType}</p>
+                      <p>BNCC: {s.bnccSkills.join(", ") || "Não identificada"}</p>
                       {s.warnings?.map(w => <p key={w} role="note">{w}</p>)}
-                      <button type="button" disabled={classification.stale || s.confidence === "low"} onClick={() => {
-                        const question = result.questions.find(q => q.id === s.questionId);
-                        if (!question) return;
-                        const draft = questionDraft(question);
-                        const pedagogy = draft.pedagogy;
-                        setQuestionDrafts(current => ({ ...current, [question.id]: { ...draft, pedagogy: {
-                          ...pedagogy, area: pedagogy.area || s.area, questionType: pedagogy.questionType || s.questionType,
-                          discipline: pedagogy.discipline || s.discipline,
-                          bnccSkills: pedagogy.bnccSkills?.length ? pedagogy.bnccSkills : s.bnccSkills,
-                        } } }));
-                        setFeedback({ message: "Sugestão copiada apenas para campos vazios. Confira a BNCC e salve a questão para registrar.", kind: "warning" });
-                      }}>Usar sugestão nos campos vazios</button>
+                      <p>Campos vazios preenchidos automaticamente. Confira e salve a questão.</p>
                     </aside>
                   ))}
 

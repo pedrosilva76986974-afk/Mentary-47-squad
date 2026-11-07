@@ -31,3 +31,7 @@ O monitor nativo do Node reiniciava o backend durante alterações em uploads, d
 Revisão básica de acessibilidade: rótulos nos campos preservados; seções recolhíveis usam details/summary nativos; controles possuem foco visível; navegação por questão tem nome acessível; texto principal ampliado. A verificação foi básica e não representa auditoria completa WCAG ou teste com leitor de tela.
 
 Limites: não foi demonstrado nesta execução upload/cancelamento por seletor de arquivo no navegador, comportamento em Safari/Firefox nem uso por participantes humanos. As rotas de cancelamento e extração possuem testes automatizados. A tela foi verificada em 870 px e 390 px. A persistência foi conferida pelo próprio fluxo de aprovação/reabertura.
+
+## 2026-11-07 — Classificação automática direta
+
+Teste assistido em navegador local, com teste-interface-simulado.pdf (duas questões). Ao solicitar classificação, a tela passou de andamento para concluída e preencheu área, disciplina, tipo e BNCC. A questão mostrou Alterações não salvas e manteve gabarito B, status aprovada e responsável existentes. Sem justificativa, confiança ou botão de copiar sugestão. A persistência requer Salvar alterações. Teste com Qwen local; BNCC sugerida não teve acurácia semântica validada. Os testes automatizados verificam preservação de campos humanos e contrato da resposta.
