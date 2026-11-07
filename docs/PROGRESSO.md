@@ -159,3 +159,12 @@ Nenhum deploy, alteração de credenciais, reset de banco ou remoção de dados 
 - Teste real com qwen3.5:4b retornou os campos esperados em aproximadamente 15 segundos para um exemplo. Não representa garantia de latência nem de acurácia BNCC.
 - Tela validada com documento simulado: classificação concluída, campos preenchidos, alterações não salvas sinalizadas e gabarito/status preservados. Não houve estudo com usuários humanos.
 - Limitação: validação BNCC verifica formato, não existência ou pertinência em catálogo oficial.
+
+## 2026-11-07 — Ficha pedagógica e edição compacta
+
+- Alternativas editáveis com letra e texto na mesma linha, bordas discretas, remoção e inclusão; rótulos acessíveis e foco visível preservados.
+- Classificação v3 preenche área, disciplina, tipo, tema, descritor e dificuldade estimada diretamente no formulário aberto. Série só quando informada; sem análise narrativa ou cartão duplicado.
+- BNCC excluída do contrato do Ollama e do preenchimento automático, inclusive quando o modelo envia esse campo indevidamente. Valores manuais existentes preservados. Cache antigo recalculado.
+- Validação: suíte completa com 99 testes (98 passaram, 1 integração opcional PostgreSQL ignorada); após acrescentar regressão de cache antigo, os 11 testes focados passaram. Builds backend/frontend passaram.
+- Navegador local e Qwen real: campos preenchidos, série/BNCC vazias, gabarito/status preservados; edição e Tab verificados com documento simulado. Nenhum teste com usuários humanos realizado.
+- Limitação: dificuldade é estimativa; descritor é descrição textual, sem validação oficial. Dados precisam ser conferidos e salvos pelo revisor.

@@ -63,7 +63,7 @@ type UploadResult = {
 };
 
 type Feedback = { message: string; kind: "success" | "warning" | "error" };
-type PedagogicalJob = { version?: number; sourceHash?: string; status: "queued" | "running" | "completed" | "failed" | "cancelled"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; bnccSkills: string[]; warnings?: string[] }> };
+type PedagogicalJob = { version?: number; sourceHash?: string; status: "queued" | "running" | "completed" | "failed" | "cancelled"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; grade: string; topic: string; descriptor: string; difficulty: "easy" | "medium" | "hard" | "unknown" }> };
 
 /** Checks the file's extension, browser MIME type, size, and real file signature before upload. */
 async function validateFile(file: File): Promise<void> {
@@ -125,7 +125,7 @@ function App() {
   const [analysisAttempt, setAnalysisAttempt] = useState(0);
   const appliedClassifications = useRef(new Set<string>());
   useEffect(() => {
-    if (!result || !classification || classification.stale || classification.version !== 2) return;
+    if (!result || !classification || classification.stale || classification.version !== 3) return;
     const pending = classification.suggestions.filter(s => !appliedClassifications.current.has(`${result.origin.id}:${classification.sourceHash}:${s.questionId}`));
     if (!pending.length) return;
     pending.forEach(s => appliedClassifications.current.add(`${result.origin.id}:${classification.sourceHash}:${s.questionId}`));
@@ -154,7 +154,7 @@ function App() {
         const response = await fetch(url, { method: start ? "POST" : "GET", signal: controller.signal });
         if (!start && response.status === 404) { await poll(true); return; }
         const payload = await readApiResponse<PedagogicalJob>(response);
-        if (!start && payload.status === "completed" && payload.version !== 2) { await poll(true); return; }
+        if (!start && payload.status === "completed" && payload.version !== 3) { await poll(true); return; }
         if (controller.signal.aborted) return;
         setClassification(payload);
         if (["queued", "running"].includes(payload.status)) timer = setTimeout(() => void poll(), 2000);
@@ -377,7 +377,7 @@ function App() {
                       setClassification(await readApiResponse<PedagogicalJob>(response));
                     } catch (error) { setFeedback({ message: errorMessage(error), kind: "error" }); }
                   }}>Cancelar classificação</button>}
-                  <p>BNCC sugerida pela IA, sem validação em catálogo oficial. Confira a habilidade, a etapa e a pertinência antes de registrá-la.</p>
+                  <p>Os campos pedagógicos são preenchidos automaticamente após a extração. BNCC fica disponível para preenchimento manual.</p>
                   {classification?.stale && <p>O conteúdo foi alterado após a análise. Solicite uma nova análise.</p>}
                   <button type="button" disabled={result.questions.length === 0 || classification?.status === "running" || classification?.status === "queued"} onClick={() => setAnalysisAttempt(n => n + 1)}>Classificar novamente</button>
               </div></details>
@@ -482,15 +482,6 @@ function App() {
                     <QuestionContentEditor content={questionDraft(question)} onChange={change => setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), ...change } }))} />
                     </div><aside className="question-inspector" aria-label="Revisão e classificação">
                     <h3>03 · Gabarito e revisão</h3>
-                  {classification && classification.suggestions.length > 0 && classification.suggestions.filter(s => s.questionId === question.id).map(s => (
-                    <aside className="ai-suggestion" key={s.questionId} aria-label="Classificação automática desta questão">
-                      <strong>Questão {result.questions.find(q => q.id === s.questionId)?.number ?? result.questions.findIndex(q => q.id === s.questionId) + 1}: {s.area || "Área indeterminada"}</strong>
-                      <p>{s.discipline} · {s.questionType}</p>
-                      <p>BNCC: {s.bnccSkills.join(", ") || "Não identificada"}</p>
-                      {s.warnings?.map(w => <p key={w} role="note">{w}</p>)}
-                      <p>Campos vazios preenchidos automaticamente. Confira e salve a questão.</p>
-                    </aside>
-                  ))}
 
                     {question.responseType === "multiple_choice" && (
                       <label className="question-edit-field">
@@ -504,8 +495,9 @@ function App() {
                       </label>
                     )}
                     {question.answerKey && <p className="question-answer-empty"><strong>Gabarito registrado:</strong> {question.answerKey}</p>}
-                    <details className="question-pedagogy">
+                    <details className="question-pedagogy" open>
                       <summary>04 · Classificação pedagógica</summary>
+                      <p className="editor-help">A IA preenche os campos vazios. Confira os dados e salve. BNCC não é preenchida automaticamente.</p>
                       <label className="question-edit-field"><span>Área do conhecimento</span><input value={questionDraft(question).pedagogy.area ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, area: value } } })); }} /></label>
                       <label className="question-edit-field"><span>Tipo de questão</span><input value={questionDraft(question).pedagogy.questionType ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, questionType: value } } })); }} /></label>
                       <div className="pedagogy-fields">

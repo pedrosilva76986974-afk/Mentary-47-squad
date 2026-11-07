@@ -28,12 +28,12 @@ export async function startClassification(id: string): Promise<ClassificationJob
   if (review.questions.length === 0) throw new DocumentValidationError("Nenhuma questão identificada para analisar.");
   const sourceHash = hash(snapshot(review.questions));
   const existing = await getClassification(id);
-  if (active.has(id) || (existing?.version === 2 && existing?.status === "completed" && existing.sourceHash === sourceHash && existing.model === process.env.OLLAMA_MODEL)) return existing;
+  if (active.has(id) || (existing?.version === 3 && existing?.status === "completed" && existing.sourceHash === sourceHash && existing.model === process.env.OLLAMA_MODEL)) return existing;
   if (!process.env.OLLAMA_MODEL) throw new DocumentValidationError("Configure OLLAMA_MODEL para analisar as questões.");
   if (active.size >= 20) throw new DocumentValidationError("Fila de análise cheia. Tente novamente mais tarde.");
   // Check again after asynchronous reads to deduplicate simultaneous starts.
   if (active.has(id)) return structuredClone(active.get(id)!);
-  const job: ClassificationJob = { version: 2, documentId: id, status: "queued", model: process.env.OLLAMA_MODEL, updatedAt: new Date().toISOString(), sourceHash, suggestions: [], owner };
+  const job: ClassificationJob = { version: 3, documentId: id, status: "queued", model: process.env.OLLAMA_MODEL, updatedAt: new Date().toISOString(), sourceHash, suggestions: [], owner };
   const cancellation = new AbortController();
   cancellations.set(id, cancellation);
   active.set(id, job);

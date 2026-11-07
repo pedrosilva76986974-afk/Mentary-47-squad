@@ -111,9 +111,9 @@ OLLAMA_KEEP_ALIVE=15m
 
 Baixe o modelo com `ollama pull qwen3.5:4b` e mantenha o Ollama aberto. `QUESTION_IDENTIFIER` não controla mais a análise: a extração é sempre local e a análise pedagógica é iniciada pela rota posterior.
 
-A IA classifica diretamente área do conhecimento, disciplina, tipo de questão e códigos BNCC, sem produzir resolução, justificativa ou nota de confiança. Os códigos são verificados quanto ao formato, sem consulta a catálogo oficial. Portanto, sua existência e pertinência precisam de conferência humana. Referência: [BNCC oficial](https://basenacionalcomum.mec.gov.br/).
+A IA preenche diretamente área do conhecimento, disciplina, tipo de questão, tema, descritor e dificuldade estimada, sem produzir resolução, justificativa ou nota de confiança. Ano/série só é preenchido quando informado, sem inferir a série pelo assunto. A IA não solicita, retorna nem preenche habilidades BNCC; o campo manual fica reservado para futura integração com fonte oficial.
 
-Após a extração, a classificação roda em segundo plano. Conforme os resultados chegam, a tela preenche automaticamente os campos pedagógicos vazios, preservando os dados informados pelo revisor. Os valores permanecem como alterações não salvas até a confirmação em **Salvar alterações**. Área, disciplina, tipo e BNCC também podem ser editados manualmente. Texto, alternativas, gabarito e status não são modificados pela IA. Resultados antigos são recalculados no novo formato.
+Após a extração, a classificação roda em segundo plano. Conforme os resultados chegam, a tela preenche automaticamente os campos pedagógicos vazios, preservando os dados informados pelo revisor. Os valores permanecem como alterações não salvas até a confirmação em **Salvar alterações**. Todos os campos pedagógicos podem ser editados manualmente. Dificuldade é uma estimativa do modelo e deve ser conferida. Texto, alternativas, gabarito e status não são modificados pela IA. Resultados antigos são recalculados no novo formato.
 
 API posterior ao upload:
 

@@ -35,3 +35,7 @@ Limites: não foi demonstrado nesta execução upload/cancelamento por seletor d
 ## 2026-11-07 — Classificação automática direta
 
 Teste assistido em navegador local, com teste-interface-simulado.pdf (duas questões). Ao solicitar classificação, a tela passou de andamento para concluída e preencheu área, disciplina, tipo e BNCC. A questão mostrou Alterações não salvas e manteve gabarito B, status aprovada e responsável existentes. Sem justificativa, confiança ou botão de copiar sugestão. A persistência requer Salvar alterações. Teste com Qwen local; BNCC sugerida não teve acurácia semântica validada. Os testes automatizados verificam preservação de campos humanos e contrato da resposta.
+
+## 2026-11-07 — Edição compacta e classificação v3
+
+Documento simulado com duas questões. Editor exibiu letra e texto lado a lado; texto alterado e restaurado, Tab funcionou. Qwen local concluiu e preencheu Matemática, múltipla escolha, tema adição, descritor textual e dificuldade fácil na primeira questão. Ano/série e BNCC permaneceram vazios, sem cartão duplicado. Gabarito B e status aprovado preservados. Formulário sinalizou alterações não salvas. Rótulos dos controles e foco visível verificados. Não representa validação da precisão pedagógica em todas as áreas.

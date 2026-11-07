@@ -14,20 +14,11 @@ export function QuestionContentEditor({ content, onChange }: { content: Content;
     </fieldset>
     <fieldset className="editor-category">
       <legend><span>02</span> Alternativas</legend>
-      <p className="editor-help">Cada opção tem seu próprio identificador e texto. Rótulos numéricos também são aceitos.</p>
-      {content.alternatives.map((item, index) => <div className="alternative-editor" key={index}>
-        <div className="alternative-editor-heading"><strong>Alternativa {index + 1}</strong>
-          <button type="button" className="remove-alternative" aria-label={`Remover alternativa ${index + 1}`} onClick={() => onChange(removeAlternative(content.alternatives, content.answerKey, index))}>Remover</button>
-        </div>
-        <div className="alternative-editor-fields">
-          <label className="question-edit-field"><span>Rótulo</span>
-            <input aria-label={`Identificador da alternativa ${index + 1}`} maxLength={10} value={item.label} onChange={event => onChange(editAlternative(content.alternatives, content.answerKey, index, { label: event.currentTarget.value }))} />
-          </label>
-          <label className="question-edit-field"><span>Texto</span>
-            <textarea aria-label={`Texto da alternativa ${index + 1}`} rows={3} value={item.text} onChange={event => onChange(editAlternative(content.alternatives, content.answerKey, index, { text: event.currentTarget.value }))} />
-          </label>
-        </div>
-        {item.label && content.answerKey === item.label && <span className="correct-choice-note">Gabarito selecionado</span>}
+      <p className="editor-help">Cada opção tem seu próprio identificador e texto. Edite diretamente a letra e o texto na mesma linha.</p>
+      {content.alternatives.map((item, index) => <div className="choice-edit-row" key={index}>
+        <input className="choice-edit-label" aria-label={"Identificador da alternativa " + (index + 1)} maxLength={10} value={item.label} onChange={event => onChange(editAlternative(content.alternatives, content.answerKey, index, { label: event.currentTarget.value }))} />
+        <textarea className="choice-edit-text" aria-label={"Texto da alternativa " + (index + 1)} rows={1} value={item.text} onChange={event => onChange(editAlternative(content.alternatives, content.answerKey, index, { text: event.currentTarget.value }))} />
+        <button type="button" className="remove-alternative choice-edit-remove" aria-label={"Remover alternativa " + (index + 1)} onClick={() => onChange(removeAlternative(content.alternatives, content.answerKey, index))}>×</button>
       </div>)}
       {!content.alternatives.length && <p className="editor-help">Nenhuma alternativa. Adicione as opções encontradas no documento.</p>}
       <button type="button" className="add-alternative" onClick={() => onChange({ alternatives: [...content.alternatives, { label: nextAlternativeLabel(content.alternatives), text: "" }] })}>+ Adicionar alternativa</button>

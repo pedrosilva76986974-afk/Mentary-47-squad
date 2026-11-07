@@ -10,7 +10,7 @@ import { identifyQuestionsDetailed } from "../src/services/question-identificati
 import { saveReviewResult } from "../src/services/review-results.service.js";
 import { classifyPedagogy } from "../src/services/ollama.service.js";
 
-const suggestion = { questionIndex: 0, area: "Matemática", discipline: "Matemática", questionType: "Múltipla escolha", bnccSkills: ["EF01MA08"], rationale: "Adição de números naturais; conferir etapa.", confidence: "medium" };
+const suggestion = { questionIndex: 0, area: "Matemática", discipline: "Matemática", questionType: "Múltipla escolha", grade: "1º ano", topic: "Adição", descriptor: "Somar números naturais", difficulty: "easy", bnccSkills: ["EF01MA08"], rationale: "Adição de números naturais; conferir etapa.", confidence: "medium" };
 function response(value: unknown) { return new Response(JSON.stringify({ message: { content: JSON.stringify(value) } }), { status: 200 }); }
 async function done(url: string) {
   for (let i = 0; i < 200; i++) {
@@ -43,12 +43,22 @@ test("post-extraction pedagogical classification lifecycle", async t => {
       assert.equal(calls, 1);
       release(response({ suggestions: [suggestion] }));
       const job = await done(url); assert.equal(job.status, "completed");
-      assert.deepEqual(job.suggestions[0].bnccSkills, ["EF01MA08"]);
+      assert.equal(job.suggestions[0].topic, "Adição");
+      assert.equal("bnccSkills" in job.suggestions[0], false);
       assert.equal(job.suggestions[0].questionId, `${id}-q1`);
       const review = await request(app).get(`/documents/${id}/review`);
       assert.equal(review.body.questions[0].pedagogy, undefined, "AI must not overwrite human metadata");
       assert.equal(review.body.questions[0].status, "pending_review");
       await request(app).post(url); assert.equal(calls, 1, "Completed same-content job is cached");
+    });
+    await t.test("old classification cache is recalculated without BNCC", async () => {
+      const file = join(directory, "jobs", id + ".json");
+      const old = JSON.parse(await readFile(file, "utf8")); old.version = 2;
+      await writeFile(file, JSON.stringify(old));
+      globalThis.fetch = async () => response({ suggestions: [suggestion] });
+      await request(app).post(url);
+      const job = await done(url); assert.equal(job.version, 3);
+      assert.equal("bnccSkills" in job.suggestions[0], false);
     });
     await t.test("flags changed content and records failures for retry", async () => {
       await request(app).patch(`/documents/${id}/review/questions/${id}-q1`).send({ prompt: "Quanto é 3 + 3?" });
@@ -75,18 +85,19 @@ test("post-extraction pedagogical classification lifecycle", async t => {
       assert.equal((await request(app).post("/documents/not-a-uuid/classification")).status, 400);
       assert.equal((await request(app).post(`/documents/${randomUUID()}/classification`)).status, 404);
     });
-    await t.test("bad BNCC cannot discard valid area and question type", async () => {
+    await t.test("classification returns form fields and ignores any unsolicited BNCC", async () => {
       globalThis.fetch = async (_url, init) => {
         const body = JSON.parse(String(init?.body));
         assert.equal(body.think, false);
-        assert.deepEqual(Object.keys(body.format.properties.suggestions.items.properties), ["questionIndex", "area", "discipline", "questionType", "bnccSkills"]);
+        assert.deepEqual(Object.keys(body.format.properties.suggestions.items.properties), ["questionIndex", "area", "discipline", "questionType", "grade", "topic", "descriptor", "difficulty"]);
         return response({ suggestions: [{ ...suggestion, bnccSkills: ["(EM13MAT02) Descrição inventada", "(EF01MA08) Descrição da habilidade"] }] });
       };
       const [result] = await classifyPedagogy(parsed.questions);
       assert.equal(result!.area, "Matemática");
       assert.equal(result!.questionType, "Múltipla escolha");
-      assert.deepEqual(result!.bnccSkills, ["EF01MA08"]);
-      assert.ok(result!.warnings?.length);
+      assert.equal("bnccSkills" in result!, false);
+      assert.equal(result!.descriptor, "Somar números naturais");
+      assert.equal(result!.difficulty, "easy");
       assert.equal("rationale" in result!, false);
       assert.equal("confidence" in result!, false);
     });
