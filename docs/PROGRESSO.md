@@ -1,5 +1,19 @@
 # Ciclos de desenvolvimento — 04/11/2026
 
+## Interface e testes de uso simulados — 07/11/2026
+
+A #4 foi confirmada como atendida pelo responsável no GitHub; não permanece como bloqueio desta execução.
+
+Reorganizada a revisão com um cartão por vez, navegação entre questões, sugestões da IA dentro do cartão correspondente, editor recolhível e diagnóstico técnico sob demanda. Corrigidos o total undefined ao reabrir revisões e onze handlers que liam event.currentTarget dentro de atualizadores adiados do React, causando tela em branco ao editar. Valores dos eventos são capturados antes de atualizar o estado.
+
+Foram executados testes reais na tela com dados fictícios, incluindo aprovação bloqueada, gabarito, responsável, aprovação/reabertura, navegação, foco e cancelamento da IA em 390 px. Evidências textuais e limites em docs/TESTES-DE-TELA.md. Não se trata de teste com usuários humanos. A inicialização da análise foi ajustada para consultar o estado existente antes de iniciar uma nova tarefa; reabrir uma revisão cancelada não deve reiniciá-la automaticamente.
+
+O teste revelou reinícios do backend por monitoramento de arquivos gerados. Substituído o watcher nativo pelo watcher do tsx com exclusão de uploads/public; repetido o cenário de aprovação com sucesso.
+
+Verificação final: 94 testes gerais passaram, zero falhas e um teste PostgreSQL optativo ignorado na suíte comum; esse teste foi executado separadamente em banco isolado e passou. Build/typecheck frontend passou. Cancelamento ao reabrir foi confirmado também na tela. Lint dedicado permanece uma pendência; checagem de espaços do Git é distinta de lint.
+
+Próxima etapa #17 bloqueada pela ausência do SQL oficial do destino public.questions. Solicitado ao responsável o link da migration. A #18 depende da definição dos registros publicados; não foi implementada uma consulta que fingisse publicar dados no banco definitivo. A view de preparação existente não é equivalente à publicação. Nenhuma tabela de referência foi inventada ou substituída.
+
 ## Cancelamento de upload e IA — issue #23 — 06/11/2026
 
 Implementado botão de cancelamento do upload com AbortController; o backend observa a desconexão e propaga AbortSignal para PDF/renderização/OCR, verifica cancelamento entre etapas e desfaz os registros da requisição cancelada antes de devolver sucesso. O worker OCR ativo é terminado no cancelamento. Operações nativas curtas/validação/armazenamento já iniciados não são preemptivos; seu resultado é descartado ou desfeito ao observar o sinal.
