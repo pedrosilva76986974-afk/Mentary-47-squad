@@ -210,3 +210,7 @@ Validação final: suíte completa com 104 testes (103 aprovados, 1 integração
 ## Repetição imediata da classificação — CI Linux
 
 A primeira execução remota revelou uma corrida preexistente: uma tarefa com status failed ainda permanecia no mapa de tarefas ativas durante a gravação final, impedindo nova tentativa imediata. A deduplicação agora considera apenas queued/running; a gravação continua serializada e a limpeza antiga respeita a identidade da tarefa nova. O teste exige resposta 202 sem devolver a falha anterior. Não se trata de timeout do modelo nem de problema no banco.
+
+## Corpus OCR portátil — CI Linux
+
+A geração sintética com Arial dependia de fonte instalada no Windows e produziu texto incompleto no runner Linux. O corpus passou a rasterizar Helvetica padrão via PDF.js, usando os recursos de fontes do projeto. Mantidos todos os critérios do OCR real em PNG, JPEG e PDF escaneado. A nova amostra também revelou AJ5 sem espaço; a recuperação contextual agora aceita esse formato somente junto de alternativas vizinhas válidas. Regressão negativa de texto AI 5 permanece.
