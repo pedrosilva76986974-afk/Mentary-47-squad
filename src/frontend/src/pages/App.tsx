@@ -111,6 +111,8 @@ function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
+  const [selectedQuestion, setSelectedQuestion] = useState(0);
+  useEffect(() => setSelectedQuestion(0), [result?.origin.id]);
   const [busy, setBusy] = useState(false);
   const [showProcessingHint, setShowProcessingHint] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -128,6 +130,7 @@ function App() {
     const poll = async (start = false): Promise<void> => {
       try {
         const response = await fetch(url, { method: start ? "POST" : "GET", signal: controller.signal });
+        if (!start && response.status === 404) { await poll(true); return; }
         const payload = await readApiResponse<PedagogicalJob>(response);
         if (controller.signal.aborted) return;
         setClassification(payload);
@@ -136,7 +139,7 @@ function App() {
         if (!controller.signal.aborted) setClassification({ status: "failed", suggestions: [], error: errorMessage(e) });
       }
     };
-    void poll(true);
+    void poll(analysisAttempt > 0);
     return () => { controller.abort(); clearTimeout(timer); };
   }, [result?.origin.id, analysisAttempt]);
 
@@ -149,7 +152,7 @@ function App() {
         const payload = await readApiResponse<UploadResult & { sourceText?: string; error?: string }>(response);
         if (!response.ok) throw new Error(payload.error || "Não foi possível carregar a revisão.");
         if (!cancelled) {
-          setResult({ ...payload, text: payload.sourceText ?? "", reviewUrl: `/documents/${encodeURIComponent(reviewId)}/review`, sourceUrl: `/documents/${encodeURIComponent(reviewId)}/source` });
+          setResult({ ...payload, questionCount: payload.questions.length, text: payload.sourceText ?? "", reviewUrl: `/documents/${encodeURIComponent(reviewId)}/review`, sourceUrl: `/documents/${encodeURIComponent(reviewId)}/source` });
           setFeedback({ message: `Registro de revisão carregado: ${payload.origin.fileName}.`, kind: "success" });
         }
       })
@@ -340,7 +343,7 @@ function App() {
               <div>
                 <p className="card-kicker">ETAPA DE REVISÃO</p>
                 <h2 id="review-title">Questões identificadas</h2>
-                <div role="status" aria-live="polite">
+                <div className="analysis-toolbar" role="status" aria-live="polite">
                   <p>Análise pedagógica: {result.questions.length === 0 ? "Nenhuma questão identificada; IA não será executada" : classification?.status === "cancelled" ? "cancelada" : classification?.status === "completed" ? "concluída — sugestões da IA para conferência" : classification?.status === "failed" ? classification.error : `em andamento (${classification?.suggestions.length ?? 0} classificadas); você já pode revisar as questões`}</p>
                   {(classification?.status === "running" || classification?.status === "queued") && <button type="button" onClick={async () => {
                     try {
@@ -351,35 +354,15 @@ function App() {
                   <p>BNCC sugerida pela IA, sem validação em catálogo oficial. Confira a habilidade, a etapa e a pertinência antes de registrá-la.</p>
                   {classification?.stale && <p>O conteúdo foi alterado após a análise. Solicite uma nova análise.</p>}
                   <button type="button" disabled={result.questions.length === 0 || classification?.status === "running" || classification?.status === "queued"} onClick={() => setAnalysisAttempt(n => n + 1)}>Analisar novamente</button>
-                  {classification && classification.suggestions.length > 0 && classification.suggestions.map(s => (
-                    <div key={s.questionId}>
-                      <strong>Questão {result.questions.find(q => q.id === s.questionId)?.number ?? result.questions.findIndex(q => q.id === s.questionId) + 1}: {s.area || "Área indeterminada"}</strong>
-                      <p>{s.discipline} · {s.questionType} · Confiança informada pela IA: {s.confidence}</p>
-                      <p>BNCC sugerida: {s.bnccSkills.join(", ") || "Não identificada com segurança"}</p>
-                      <p>{s.rationale}</p>
-                      {s.warnings?.map(w => <p key={w} role="note">{w}</p>)}
-                      <button type="button" disabled={classification.stale || s.confidence === "low"} onClick={() => {
-                        const question = result.questions.find(q => q.id === s.questionId);
-                        if (!question) return;
-                        const draft = questionDraft(question);
-                        const pedagogy = draft.pedagogy;
-                        setQuestionDrafts(current => ({ ...current, [question.id]: { ...draft, pedagogy: {
-                          ...pedagogy, area: pedagogy.area || s.area, questionType: pedagogy.questionType || s.questionType,
-                          discipline: pedagogy.discipline || s.discipline,
-                          bnccSkills: pedagogy.bnccSkills?.length ? pedagogy.bnccSkills : s.bnccSkills,
-                        } } }));
-                        setFeedback({ message: "Sugestão copiada apenas para campos vazios. Confira a BNCC e salve a questão para registrar.", kind: "warning" });
-                      }}>Usar sugestão nos campos vazios</button>
-                    </div>
-                  ))}
-                </div>
+              </div>
                 <p className="review-summary">
                   {result.questionCount === 0
                     ? "O texto foi extraído, mas não encontramos enunciados com segurança suficiente."
                     : `${result.questionCount} questão(ões) encontradas · ${result.pages} página(s) · extração por ${extractionMethodLabel(result.method)}`}
                 </p>
                 {result.identification && (
-                  <div className={`identification-diagnostic ${result.identification.method === "rules" ? "is-fallback" : ""}`} role="status">
+                  <details className={`identification-diagnostic ${result.identification.method === "rules" ? "is-fallback" : ""}`} >
+                    <summary>Detalhes do processamento</summary>
                     <strong>{identifierLabel(result.identification.method)}</strong>
                     {result.identification.model && <span>Modelo: {result.identification.model}</span>}
                     <span>
@@ -392,7 +375,7 @@ function App() {
                       <span>Tokens de entrada: {result.identification.ollama.promptTokens} · Resposta: {result.identification.ollama.outputTokens ?? 0} tokens</span>
                     )}
                     {result.identification.reason && <span>{result.identification.reason}</span>}
-                  </div>
+                  </details>
                 )}
               </div>
               <span className="review-count" aria-label={`${result.questionCount} questões`}>{result.questionCount}</span>
@@ -400,7 +383,15 @@ function App() {
 
             {result.questions.length > 0 ? (
               <div className="questions-list">
-                {result.questions.map((question, index) => (
+                <nav className="question-navigation" aria-label="Navegar pelas questões">
+                  <button type="button" disabled={selectedQuestion === 0} onClick={() => setSelectedQuestion(n => n - 1)}>Anterior</button>
+                  <label>Questão<select value={selectedQuestion} onChange={event => setSelectedQuestion(Number(event.currentTarget.value))}>
+                    {result.questions.map((q, i) => <option key={q.id} value={i}>Questão {q.number ?? i + 1} — {q.status === "approved" ? "Aprovada" : q.status === "rejected" ? "Rejeitada" : "Em revisão"}</option>)}
+                  </select></label>
+                  <span>{selectedQuestion + 1} de {result.questions.length}</span>
+                  <button type="button" disabled={selectedQuestion === result.questions.length - 1} onClick={() => setSelectedQuestion(n => n + 1)}>Próxima</button>
+                </nav>
+                {result.questions.map((question, index) => ({ question, index })).filter(({ index }) => index === selectedQuestion).map(({ question, index }) => (
                   <article className="question-item" key={question.id}>
                     <div className="question-meta">
                       <span className="question-label">Questão {question.number ?? index + 1}</span>
@@ -459,9 +450,32 @@ function App() {
                         </p>
                       )}
                     </section>
+                  {classification && classification.suggestions.length > 0 && classification.suggestions.filter(s => s.questionId === question.id).map(s => (
+                    <aside className="ai-suggestion" key={s.questionId} aria-label="Sugestão da IA para esta questão">
+                      <strong>Questão {result.questions.find(q => q.id === s.questionId)?.number ?? result.questions.findIndex(q => q.id === s.questionId) + 1}: {s.area || "Área indeterminada"}</strong>
+                      <p>{s.discipline} · {s.questionType} · Confiança informada pela IA: {s.confidence}</p>
+                      <p>BNCC sugerida: {s.bnccSkills.join(", ") || "Não identificada com segurança"}</p>
+                      <p>{s.rationale}</p>
+                      {s.warnings?.map(w => <p key={w} role="note">{w}</p>)}
+                      <button type="button" disabled={classification.stale || s.confidence === "low"} onClick={() => {
+                        const question = result.questions.find(q => q.id === s.questionId);
+                        if (!question) return;
+                        const draft = questionDraft(question);
+                        const pedagogy = draft.pedagogy;
+                        setQuestionDrafts(current => ({ ...current, [question.id]: { ...draft, pedagogy: {
+                          ...pedagogy, area: pedagogy.area || s.area, questionType: pedagogy.questionType || s.questionType,
+                          discipline: pedagogy.discipline || s.discipline,
+                          bnccSkills: pedagogy.bnccSkills?.length ? pedagogy.bnccSkills : s.bnccSkills,
+                        } } }));
+                        setFeedback({ message: "Sugestão copiada apenas para campos vazios. Confira a BNCC e salve a questão para registrar.", kind: "warning" });
+                      }}>Usar sugestão nos campos vazios</button>
+                    </aside>
+                  ))}
+
+                    <details className="question-editor"><summary>Editar e revisar esta questão</summary>
                     <label className="question-edit-field">
                       <span>Editar enunciado</span>
-                      <textarea value={questionDraft(question).prompt} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), prompt: event.currentTarget.value } }))} rows={3} />
+                      <textarea value={questionDraft(question).prompt} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), prompt: value } })); }} rows={3} />
                     </label>
                     {(question.alternatives && question.alternatives.length > 0 || question.responseType === "multiple_choice") && (
                       <label className="question-edit-field">
@@ -478,7 +492,7 @@ function App() {
                     {question.responseType === "multiple_choice" && (
                       <label className="question-edit-field">
                         <span>Selecione o gabarito</span>
-                        <select value={questionDraft(question).answerKey ?? ""} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), answerKey: event.currentTarget.value || null } }))}>
+                        <select value={questionDraft(question).answerKey ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), answerKey: value || null } })); }}>
                           <option value="">Selecione uma alternativa</option>
                           {questionDraft(question).alternatives.map((alternative) => (
                             <option key={alternative.label} value={alternative.label}>{alternative.label} — {alternative.text}</option>
@@ -489,20 +503,20 @@ function App() {
                     {question.answerKey && <p className="question-answer-empty"><strong>Gabarito registrado:</strong> {question.answerKey}</p>}
                     <details className="question-pedagogy">
                       <summary>Classificação pedagógica</summary>
-                      <label className="question-edit-field"><span>Área do conhecimento</span><input value={questionDraft(question).pedagogy.area ?? ""} onChange={event => setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, area: event.currentTarget.value } } }))} /></label>
-                      <label className="question-edit-field"><span>Tipo de questão</span><input value={questionDraft(question).pedagogy.questionType ?? ""} onChange={event => setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, questionType: event.currentTarget.value } } }))} /></label>
+                      <label className="question-edit-field"><span>Área do conhecimento</span><input value={questionDraft(question).pedagogy.area ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, area: value } } })); }} /></label>
+                      <label className="question-edit-field"><span>Tipo de questão</span><input value={questionDraft(question).pedagogy.questionType ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, questionType: value } } })); }} /></label>
                       <div className="pedagogy-fields">
-                        <label className="question-edit-field"><span>Disciplina</span><input value={questionDraft(question).pedagogy.discipline ?? ""} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, discipline: event.currentTarget.value } } }))} /></label>
-                        <label className="question-edit-field"><span>Ano/série</span><input value={questionDraft(question).pedagogy.grade ?? ""} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, grade: event.currentTarget.value } } }))} /></label>
-                        <label className="question-edit-field"><span>Tema</span><input value={questionDraft(question).pedagogy.topic ?? ""} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, topic: event.currentTarget.value } } }))} /></label>
-                        <label className="question-edit-field"><span>Habilidades BNCC (separadas por vírgula)</span><input value={questionDraft(question).pedagogy.bnccSkills?.join(", ") ?? ""} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, bnccSkills: event.currentTarget.value.split(",").map((item) => item.trim()).filter(Boolean) } } }))} /></label>
-                        <label className="question-edit-field"><span>Descritor</span><input value={questionDraft(question).pedagogy.descriptor ?? ""} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, descriptor: event.currentTarget.value } } }))} /></label>
-                        <label className="question-edit-field"><span>Dificuldade</span><select value={questionDraft(question).pedagogy.difficulty ?? "unknown"} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, difficulty: event.currentTarget.value as NonNullable<Question["pedagogy"]>["difficulty"] } } }))}><option value="unknown">Não definida</option><option value="easy">Fácil</option><option value="medium">Média</option><option value="hard">Difícil</option></select></label>
+                        <label className="question-edit-field"><span>Disciplina</span><input value={questionDraft(question).pedagogy.discipline ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, discipline: value } } })); }} /></label>
+                        <label className="question-edit-field"><span>Ano/série</span><input value={questionDraft(question).pedagogy.grade ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, grade: value } } })); }} /></label>
+                        <label className="question-edit-field"><span>Tema</span><input value={questionDraft(question).pedagogy.topic ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, topic: value } } })); }} /></label>
+                        <label className="question-edit-field"><span>Habilidades BNCC (separadas por vírgula)</span><input value={questionDraft(question).pedagogy.bnccSkills?.join(", ") ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, bnccSkills: value.split(",").map((item) => item.trim()).filter(Boolean) } } })); }} /></label>
+                        <label className="question-edit-field"><span>Descritor</span><input value={questionDraft(question).pedagogy.descriptor ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, descriptor: value } } })); }} /></label>
+                        <label className="question-edit-field"><span>Dificuldade</span><select value={questionDraft(question).pedagogy.difficulty ?? "unknown"} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, difficulty: value as NonNullable<Question["pedagogy"]>["difficulty"] } } })); }}><option value="unknown">Não definida</option><option value="easy">Fácil</option><option value="medium">Média</option><option value="hard">Difícil</option></select></label>
                       </div>
                     </details>
                     <label className="question-edit-field">
                       <span>Responsável pela revisão</span>
-                      <input value={questionDraft(question).reviewedBy} onChange={(event) => setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), reviewedBy: event.currentTarget.value } }))} maxLength={120} />
+                      <input value={questionDraft(question).reviewedBy} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), reviewedBy: value } })); }} maxLength={120} />
                     </label>
                     <span className="question-status">{question.status === "approved" ? "Aprovada" : question.status === "rejected" ? "Rejeitada" : "Aguardando revisão"}</span>
                     <div className="question-actions">
@@ -511,6 +525,7 @@ function App() {
                       <button type="button" onClick={() => void saveQuestion(question, "approved")} disabled={savingQuestion !== null}>Aprovar</button>
                       <button type="button" onClick={() => void saveQuestion(question, "rejected")} disabled={savingQuestion !== null}>Rejeitar</button>
                     </div>
+                    </details>
                   </article>
                 ))}
               </div>
