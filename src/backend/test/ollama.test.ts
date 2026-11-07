@@ -93,7 +93,10 @@ test("post-extraction pedagogical classification lifecycle", async t => {
       await request(app).post(url);
       assert.equal((await done(url)).status, "failed");
       globalThis.fetch = async () => response({ suggestions: [suggestion] });
-      await request(app).post(url); assert.equal((await done(url)).status, "completed");
+      const retry = await request(app).post(url);
+      assert.equal(retry.status, 202);
+      assert.notEqual(retry.body.status, "failed", "Retry must enqueue even while the failed job finishes its final disk write");
+      assert.equal((await done(url)).status, "completed");
       await request(app).patch(`/documents/${id}/review/questions/${id}-q1`).send({ pedagogy: { grade: "2º ano" } });
       assert.equal((await request(app).get(url)).body.stale, true, "A human grade change must invalidate the classification");
     });

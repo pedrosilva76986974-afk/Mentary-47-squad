@@ -8,6 +8,10 @@ import { DocumentValidationError } from "./document-validation.service.js";
 export type ClassificationJob = { version?: number; source?: ReturnType<typeof snapshot>; documentId: string; status: "queued" | "running" | "completed" | "failed" | "cancelled"; model: string; updatedAt: string; sourceHash: string; suggestions: Array<PedagogicalSuggestion & { questionId: string }>; error?: string; owner: string };
 const owner = randomUUID();
 const active = new Map<string, ClassificationJob>();
+function runningJob(id: string): ClassificationJob | undefined {
+  const job = active.get(id);
+  return job && ["queued", "running"].includes(job.status) ? job : undefined;
+}
 const cancellations = new Map<string, AbortController>();
 let tail = Promise.resolve();
 function path(id: string) { if (!/^[\da-f-]{36}$/i.test(id)) throw new DocumentValidationError("Documento inválido."); return resolve(process.env.MENTARY_CLASSIFICATION_DIRECTORY ?? resolve(process.cwd(), "uploads", "classifications"), `${id}.json`); }
@@ -48,11 +52,14 @@ export async function startClassification(id: string): Promise<ClassificationJob
   const existing = await getClassification(id);
   const unchanged = existing && !(await classificationIsStale(id, existing));
   const sourceHash = unchanged ? existing.sourceHash : hash(snapshot(review.questions));
-  if (active.has(id) || (existing?.version === 6 && existing?.status === "completed" && existing.sourceHash === sourceHash && existing.model === process.env.OLLAMA_MODEL)) return existing;
+  const running = runningJob(id);
+  if (running) return structuredClone(running);
+  if (existing?.version === 6 && existing?.status === "completed" && existing.sourceHash === sourceHash && existing.model === process.env.OLLAMA_MODEL) return existing;
   if (!process.env.OLLAMA_MODEL) throw new DocumentValidationError("Configure OLLAMA_MODEL para analisar as questões.");
   if (active.size >= 20) throw new DocumentValidationError("Fila de análise cheia. Tente novamente mais tarde.");
   // Check again after asynchronous reads to deduplicate simultaneous starts.
-  if (active.has(id)) return structuredClone(active.get(id)!);
+  const concurrent = runningJob(id);
+  if (concurrent) return structuredClone(concurrent);
   const job: ClassificationJob = { version: 6, source: unchanged ? existing.source ?? snapshot(review.questions) : snapshot(review.questions), documentId: id, status: "queued", model: process.env.OLLAMA_MODEL, updatedAt: new Date().toISOString(), sourceHash, suggestions: existing?.version === 6 && existing.sourceHash === sourceHash && existing.model === process.env.OLLAMA_MODEL ? existing.suggestions : [], owner };
   const cancellation = new AbortController();
   cancellations.set(id, cancellation);

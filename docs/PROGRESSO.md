@@ -206,3 +206,7 @@ Validação final: as duas questões do documento simulado foram preenchidas pel
 - Métrica por questão inclui retentativa automática; fila e consulta do navegador ficam fora do orçamento. Teste de regressão verifica que o tempo da tentativa malsucedida não é ocultado. Cache v6 impede reutilização do perfil antigo.
 
 Validação final: suíte completa com 104 testes (103 aprovados, 1 integração PostgreSQL opcional ignorada), sem falhas; builds backend/frontend aprovados. Após o ajuste final da métrica configurável, os 15 testes focados passaram. Meta exibida agora usa o valor configurado e inclui tentativas malsucedidas. Estado final local: apenas uma instância deste backend atendendo a porta 3000, com configuração qwen3.5:2b/16 camadas.
+
+## Repetição imediata da classificação — CI Linux
+
+A primeira execução remota revelou uma corrida preexistente: uma tarefa com status failed ainda permanecia no mapa de tarefas ativas durante a gravação final, impedindo nova tentativa imediata. A deduplicação agora considera apenas queued/running; a gravação continua serializada e a limpeza antiga respeita a identidade da tarefa nova. O teste exige resposta 202 sem devolver a falha anterior. Não se trata de timeout do modelo nem de problema no banco.
