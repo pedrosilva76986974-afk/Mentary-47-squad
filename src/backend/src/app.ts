@@ -1,3 +1,4 @@
+import { questionBankRouter } from "./routes/question-bank.routes.js";
 import express from "express";
 import multer from "multer";
 import { resolve, dirname } from "node:path";
@@ -12,6 +13,7 @@ const frontendPath = resolve(dirname(fileURLToPath(import.meta.url)), "../public
 app.use(express.json({ limit: "100kb" }));
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/documents", documentsRouter);
+app.use("/questions", questionBankRouter);
 app.use(express.static(frontendPath));
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {

@@ -1,3 +1,4 @@
+import { publishExistingApprovedQuestions } from "./services/question-bank.service.js";
 import { app } from "./app.js";
 import { cleanupExpiredDocuments } from "./services/document-retention.service.js";
 import { initializeDatabase } from "./services/database.service.js";
@@ -18,6 +19,7 @@ async function startServer(): Promise<void> {
   await initializeDatabase();
   const migratedReviews = await migrateLegacyReviewFiles();
   if (migratedReviews > 0) console.log(`${migratedReviews} revisão(ões) antiga(s) migrada(s) para o PostgreSQL.`);
+  await publishExistingApprovedQuestions();
   await runRetentionCleanup();
   const cleanupTimer = setInterval(() => void runRetentionCleanup(), 24 * 60 * 60 * 1000);
   cleanupTimer.unref();

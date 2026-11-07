@@ -1,3 +1,5 @@
+import { SiteHeader } from "../components/SiteHeader.js";
+import { VisualSourceEditor } from "../components/VisualSourceEditor.js";
 import { fillEmptyPedagogy } from "../utils/pedagogy-filling.js";
 import { QuestionContentEditor } from "../components/QuestionContentEditor.js";
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
@@ -31,16 +33,17 @@ type Question = {
     difficulty?: "easy" | "medium" | "hard" | "unknown";
   };
   missingComponents?: Array<"prompt" | "alternatives" | "answer">;
-  pageStart: number;
-  pageEnd: number;
+  pageStart: number | null;
+  pageEnd: number | null;
   status: "pending_review" | "approved" | "rejected";
   reviewedBy?: string | null;
-  visualReferences?: Array<{ page: number; kind: "image" | "graphic" }>;
+  visualReferences?: Array<{ page: number; kind: "image" | "graphic"; region?: {x:number;y:number;width:number;height:number}; association?: "automatic"|"manual"|"unconfirmed" }>;
 };
 
-type ReviewUpdate = { prompt: string; alternatives: Array<{ label: string; text: string }>; answerKey: string | null; pedagogy: NonNullable<Question["pedagogy"]>; reviewedBy: string; status?: Question["status"] };
+type ReviewUpdate = { pageStart: number | null; pageEnd: number | null; visualReferences?: Question["visualReferences"]; prompt: string; alternatives: Array<{ label: string; text: string }>; answerKey: string | null; pedagogy: NonNullable<Question["pedagogy"]>; reviewedBy: string; status?: Question["status"] };
 
 type UploadResult = {
+  publishedQuestionIds?: string[];
   status: "pending_review" | "no_questions";
   message: string;
   origin: { fileName: string; id?: string; mimeType?: string };
@@ -134,7 +137,7 @@ function App() {
       for (const suggestion of pending) {
         const question = result.questions.find(q => q.id === suggestion.questionId);
         if (!question) continue;
-        const draft = current[question.id] ?? { prompt: question.prompt ?? question.text, alternatives: question.alternatives ?? [], answerKey: question.answerKey ?? null, pedagogy: question.pedagogy ?? {}, reviewedBy: question.reviewedBy ?? "" };
+        const draft = current[question.id] ?? { pageStart:question.pageStart,pageEnd:question.pageEnd,visualReferences:question.visualReferences, prompt: question.prompt ?? question.text, alternatives: question.alternatives ?? [], answerKey: question.answerKey ?? null, pedagogy: question.pedagogy ?? {}, reviewedBy: question.reviewedBy ?? "" };
         if (draft.prompt !== (question.prompt ?? question.text) || JSON.stringify(draft.alternatives) !== JSON.stringify(question.alternatives ?? []) || draft.pedagogy.grade !== question.pedagogy?.grade || draft.pedagogy.discipline !== question.pedagogy?.discipline) continue;
         next[question.id] = { ...draft, pedagogy: fillEmptyPedagogy(draft.pedagogy, suggestion) };
       }
@@ -251,6 +254,7 @@ function App() {
 
   function questionDraft(question: Question): ReviewUpdate {
     return questionDrafts[question.id] ?? {
+      pageStart:question.pageStart, pageEnd:question.pageEnd, visualReferences:question.visualReferences,
       prompt: question.prompt ?? question.text,
       alternatives: question.alternatives ?? [],
       answerKey: question.answerKey ?? null,
@@ -268,16 +272,16 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...questionDraft(question), ...(status ? { status } : {}) }),
       });
-      const payload = await readApiResponse<{ questions?: Question[]; error?: string }>(response);
+      const payload = await readApiResponse<{ questions?: Question[]; publishedQuestionIds?: string[]; error?: string }>(response);
       if (!response.ok) throw new Error(payload.error || "Não foi possível salvar a revisão.");
       const draft = questionDraft(question);
       const classified = classification?.suggestions.find(s => s.questionId === question.id);
       if (draft.prompt !== (question.prompt ?? question.text) || JSON.stringify(draft.alternatives) !== JSON.stringify(question.alternatives ?? []) || (draft.pedagogy.grade !== question.pedagogy?.grade && draft.pedagogy.grade !== classified?.grade) || (draft.pedagogy.discipline !== question.pedagogy?.discipline && draft.pedagogy.discipline !== classified?.discipline)) {
         setClassification(current => current ? { ...current, stale: true } : current);
       }
-      if (payload.questions) setResult((current) => current ? { ...current, questions: payload.questions! } : current);
+      if (payload.questions) setResult((current) => current ? { ...current, questions: payload.questions!, publishedQuestionIds: payload.publishedQuestionIds } : current);
       setQuestionDrafts((current) => { const next = { ...current }; delete next[question.id]; return next; });
-      setFeedback({ message: status === "approved" ? "Questão aprovada e salva." : status === "rejected" ? "Questão rejeitada e salva." : status === "pending_review" ? "Questão mantida em revisão." : "Alterações da questão salvas.", kind: "success" });
+      setFeedback({ message: status === "approved" ? (payload.publishedQuestionIds?.includes(question.id) ? "Questão aprovada e publicada no banco." : "Questão aprovada e salva.") : status === "rejected" ? "Questão rejeitada e salva." : status === "pending_review" ? "Questão mantida em revisão." : "Alterações da questão salvas.", kind: "success" });
     } catch (error) {
       setFeedback({ message: errorMessage(error), kind: "error" });
     } finally {
@@ -287,15 +291,7 @@ function App() {
 
   return (
     <div className="page-shell">
-      <header className="topbar">
-        <a className="brand" href="https://mentary.com.br/" aria-label="Mentary, site institucional">
-          <img src="/assets/mentary-logo.png" alt="Mentary" />
-        </a>
-        <nav aria-label="Navegação principal">
-          <a href="https://mentary.com.br/">INÍCIO</a>
-          <a className="active" href="/">ENVIAR MATERIAL</a>
-        </nav>
-      </header>
+      <SiteHeader />
 
       <main className={`hero-layout${result ? " has-review" : ""}`}>
         <section className="hero-copy" aria-labelledby="page-title">
@@ -413,29 +409,13 @@ function App() {
                       <span className="question-label">Questão {question.number ?? index + 1}</span>
                       {questionDrafts[question.id] && <span className="unsaved-badge">Alterações não salvas</span>}
                       <span className="question-page">
-                        {question.pageStart === question.pageEnd
+                        {question.pageStart === null ? "Página desconhecida" : question.pageStart === question.pageEnd
                           ? `Página ${question.pageStart}`
                           : `Páginas ${question.pageStart}–${question.pageEnd}`}
                       </span>
                     </div>
                     <div className="question-columns"><div className="question-content">
-                    {result.origin.id && result.origin.mimeType && (
-                      <details className="question-source">
-                        <summary>{question.visualReferences?.length ? "Ver elemento visual no documento original" : "Ver documento original nesta página"}</summary>
-                        {question.visualReferences?.map((visual) => (
-                          <p className="visual-review-note" key={`${visual.page}-${visual.kind}`} role="note">
-                            {visual.kind === "image" ? "Imagem" : "Gráfico, tabela ou figura"} detectado na página {visual.page}. A página original foi preservada, mas o elemento não foi isolado; confirme a associação com a questão.
-                          </p>
-                        ))}
-                        {result.origin.mimeType === "application/pdf" ? (
-                          (question.visualReferences?.length ? question.visualReferences.map((visual) => (
-                            <iframe key={`${visual.page}-${visual.kind}`} title={`Página ${visual.page} do documento original`} src={`/documents/${encodeURIComponent(result.origin.id ?? "")}/source#page=${visual.page}`} loading="lazy" />
-                          )) : <iframe title={`Página ${question.pageStart} do documento original`} src={`/documents/${encodeURIComponent(result.origin.id)}/source#page=${question.pageStart}`} loading="lazy" />)
-                        ) : (
-                          <img src={`/documents/${encodeURIComponent(result.origin.id)}/source`} alt={`Documento original da questão ${question.number ?? index + 1}`} loading="lazy" />
-                        )}
-                      </details>
-                    )}
+                    {result.origin.id && <VisualSourceEditor documentId={result.origin.id} pages={result.pages} content={questionDraft(question)} onChange={change=>setQuestionDrafts(current=>({...current,[question.id]:{...questionDraft(question),...change}}))} />}
                     <span className="question-type">
                       {getResponseTypeLabel()}
                     </span>
@@ -516,6 +496,7 @@ function App() {
                       <span>Responsável pela revisão</span>
                       <input value={questionDraft(question).reviewedBy} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), reviewedBy: value } })); }} maxLength={120} />
                     </label>
+                    {question.status === "approved" && result.publishedQuestionIds && <p className="editor-help">{result.publishedQuestionIds.includes(question.id) ? "Publicada no banco de questões." : "Esta aprovação antiga tem pendências. Confira enunciado, alternativas, gabarito e responsável antes de salvar."}</p>}
                     <span className="question-status">{question.status === "approved" ? "Aprovada" : question.status === "rejected" ? "Rejeitada" : "Aguardando revisão"}</span>
                     <div className="question-actions">
                       <button type="button" onClick={() => void saveQuestion(question)} disabled={savingQuestion !== null}>{savingQuestion === question.id ? "Salvando…" : "Salvar alterações"}</button>

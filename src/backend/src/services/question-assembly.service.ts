@@ -15,8 +15,8 @@ type ParsedQuestion = {
   responseType?: "multiple_choice";
   alternatives?: Array<{ label: string; text: string }>;
   missingComponents?: Array<"prompt" | "alternatives" | "answer">;
-  pageStart: number;
-  pageEnd: number;
+  pageStart: number | null;
+  pageEnd: number | null;
   confidence: "high" | "medium";
 };
 
@@ -71,11 +71,11 @@ function mergeQuestionFragments(questions: ParsedQuestion[]): ParsedQuestion[] {
     const isSameQuestionFragment = previous
       && question.number !== null
       && previous.number === question.number
-      && previous.pageStart === question.pageStart;
+      && previous.pageStart !== null && previous.pageStart === question.pageStart;
 
     if (isSameQuestionFragment && previous) {
       previous.text = normalizeQuestionText(`${previous.text}\n${question.text}`);
-      previous.pageEnd = Math.max(previous.pageEnd, question.pageEnd);
+      previous.pageEnd = previous.pageEnd === null ? question.pageEnd : question.pageEnd === null ? previous.pageEnd : Math.max(previous.pageEnd, question.pageEnd);
       if (previous.confidence === "medium" && question.confidence === "high") {
         previous.confidence = "high";
       }

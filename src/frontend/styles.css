@@ -332,3 +332,23 @@ footer span { color: var(--electric-blue); font-size: 11px; font-weight: 900; }
 .classification-state { display:inline-block; color:#493679; font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px; background:#eee8fa; }
 .question-pedagogy .analysis-toolbar { font-size:12px; line-height:1.6; border-radius:8px; padding:10px; }
 .classification-timing { color:#5b506e; font-size:12px; line-height:1.5; }
+.topbar nav { flex-wrap:wrap; }
+.bank-panel { background:#fff; border:1px solid #e7e1f1; border-radius:18px; padding:32px; margin:32px auto; max-width:1100px; color:#312b42; }
+.bank-panel h1 { color:#35226f; }
+.bank-filters { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:16px 0 24px; }
+.bank-panel button,.source-crop-fields button { padding:11px 15px; border:1px solid #cfc1e6; border-radius:8px; color:#53358f; background:#f2ebfc; cursor:pointer; font:inherit; font-size:13px; font-weight:600; }
+.bank-panel button:disabled { opacity:.55; cursor:not-allowed; }
+.bank-panel button:focus-visible,.source-crop-fields button:focus-visible { outline:3px solid #7154c5; outline-offset:3px; }
+.bank-actions,.bank-selection,.bank-pagination { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
+.bank-selection { padding:15px 0; border-block:1px solid #e5dfed; }
+.bank-question { margin:20px 0; padding:22px; border:1px solid #e7e1f1; border-radius:12px; }
+.bank-tags { color:#66528f; font-size:13px; }
+.bank-select-label { display:flex; align-items:center; gap:10px; margin:15px 0; font-size:13px; }
+.bank-select-label input { width:18px; height:18px; accent-color:#7052c7; }
+.bank-panel details { margin:16px 0; line-height:1.7; }
+.bank-panel summary { cursor:pointer; color:#53358f; font-weight:600; }
+.source-crop-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; border:1px solid #e7e1f1; padding:12px; margin-top:16px; border-radius:8px; }
+.source-crop-fields legend { color:#53358f; font-size:13px; }
+.question-source img { max-width:100%; height:auto; }
+@media(max-width:700px) { .bank-panel { padding:18px; margin-top:20px; } .bank-filters { grid-template-columns:1fr; } .source-crop-fields { grid-template-columns:1fr; } .bank-question { padding:14px; } .topbar { flex-wrap:wrap; gap:16px; } }
+.bank-visual { max-width:100%; height:auto; border:1px solid #eee8f5; border-radius:8px; }

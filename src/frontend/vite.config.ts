@@ -8,6 +8,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      "/questions": { target: "http://localhost:3000", changeOrigin: true },
       "/documents": {
         target: "http://localhost:3000",
         changeOrigin: true,
