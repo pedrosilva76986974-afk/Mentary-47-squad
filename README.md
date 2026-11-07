@@ -94,7 +94,13 @@ O sistema confere extensão, tipo informado e conteúdo real do arquivo antes de
 
 As questões ficam disponíveis na tela de revisão logo após o envio. Também podem ser consultadas pela rota `GET /documents/{id}/review`, usando o `id` retornado pelo upload. A revisão permite editar enunciados e alternativas, registrar gabaritos e salvar o status de cada questão (`pending_review`, `approved` ou `rejected`) pela rota `PATCH /documents/{id}/review/questions/{questionId}`. Questões de múltipla escolha precisam de gabarito antes de serem aprovadas. A tela pode ser reaberta pelo link de revisão compartilhável. Se nenhum enunciado for identificado, o sistema informa isso, salva um resultado sem questões e disponibiliza o texto extraído para conferência. Se a extração falhar ou não produzir texto legível, a operação retorna erro e não cria um resultado de revisão.
 
-Os dados das revisões — texto extraído, questões, alternativas e alterações feitas pelo revisor — ficam no PostgreSQL. Os metadados de origem continuam em `src/backend/uploads/manifest.json` e os arquivos originais ficam em `src/backend/uploads/documents`; eles podem ser consultados pela rota `GET /documents/{id}/source`. O PostgreSQL e os arquivos precisam estar disponíveis para restaurar uma revisão completa. Por padrão, documentos e revisões com mais de 30 dias são removidos na inicialização e depois diariamente. Configure `MENTARY_RETENTION_DAYS` para outro prazo em dias ou use `0` para desativar a limpeza automática.
+Os dados das revisões — texto extraído, questões, alternativas e alterações feitas pelo revisor — ficam no PostgreSQL. Os metadados de origem continuam em `src/backend/uploads/manifest.json` e os arquivos originais ficam em `src/backend/uploads/documents`; eles podem ser consultados pela rota `GET /documents/{id}/source`. O PostgreSQL e os arquivos precisam estar disponíveis para restaurar uma revisão completa. Por padrão, documentos e revisões não publicados com mais de 30 dias são removidos na inicialização e depois diariamente. Documentos vinculados a publicações ativas são protegidos para preservar imagens e rastreabilidade. Configure `MENTARY_RETENTION_DAYS` para outro prazo em dias ou use `0` para desativar a limpeza automática.
+
+## Banco de questões próprio
+
+Abra **BANCO DE QUESTÕES** na navegação, ou /?bank=1. A tela pesquisa enunciados e combina filtros de disciplina, série, tema, BNCC, descritor e dificuldade. Os filtros pedagógicos comparam valores completos. Há paginação, consulta das origens e recortes visuais, seleção de até 100 questões e exportação da seleção em JSON. Uma seleção que deixou de estar publicada precisa ser atualizada antes da exportação.
+
+Páginas desconhecidas podem ser salvas sem inventar uma página. Na revisão, abra **Documento original e vínculo visual** para conferir o recorte estimado, ajustar página e coordenadas e salvar a associação. OCR ilegível ou limites ambíguos permanecem para revisão humana.
 
 ## Análise pedagógica com Ollama após a extração
 
@@ -205,3 +211,14 @@ Remove-Item Env:MENTARY_POSTGRES_TEST
 ```
 
 O teste exige permissão para criar um banco temporário. Ele cria um nome aleatório, valida migrações, persistência, rollback e a view de exportação, e remove somente esse banco de teste ao terminar. A suíte comum ignora esse teste quando `MENTARY_POSTGRES_TEST` não está ativado. O teste não publica questões em `public.questions`.
+
+## Verificações automáticas e documentação
+
+Backend: npm run lint, npm run build, npm test, npm run test:postgres e npm run test:ocr. Frontend: npm run lint e npm run build. Execute os comandos em suas respectivas pastas. Os testes PostgreSQL usam uma base temporária isolada; não apagam o banco da aplicação. OCR real pode baixar dados públicos do idioma português no primeiro uso.
+
+O workflow .github/workflows/ci.yml executa lint, builds, testes gerais, PostgreSQL isolado e OCR real em pushes e Pull Requests. A execução remota deve ser conferida no GitHub; configuração do workflow não comprova uma execução aprovada. Lint verifica importações/variáveis não usadas, referências não declaradas, código inalcançável e regras básicas de imagem/botão; não substitui typecheck nem testes.
+
+- [Contrato e migrações do banco](database/README.md)
+- [Diagrama de classes](docs/DIAGRAMA-DE-CLASSES.md)
+- [Catálogo de bugs](docs/CATALOGO-DE-BUGS.md)
+- [Testes de tela](docs/TESTES-DE-TELA.md)

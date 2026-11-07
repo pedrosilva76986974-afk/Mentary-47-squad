@@ -1,3 +1,14 @@
+## Banco próprio e seis frentes — 07/11/2026
+
+A dependência do banco externo Mentary foi retirada do fluxo de publicação. As migrations 005–007 criam banco.questions e banco.question_sources no PostgreSQL local, mantendo extrator para revisão e o legado intacto. Aprovar publica na mesma transação; pendentes/rejeitadas não aparecem na consulta. Reabrir retira aquela origem ativa. Duplicatas exatas normalizadas compartilham a questão e preservam todas as origens. Equivalência semântica, paráfrases e alternativas reordenadas ainda exigem conferência humana. O bloqueio histórico da #17 descrito abaixo foi substituído por esta implementação autorizada de banco próprio.
+
+Frentes entregues: publicação/deduplicação (#17); consulta, sete filtros combináveis, paginação, seleção e exportação JSON (#18); recortes visuais automáticos por posição e ajuste manual (#10); página desconhecida persistida sem inventar número (#11); corpus automatizado de OCR real em PNG/JPEG/PDF escaneado, incluindo correção contextual de marcador AJ; documentação, diagrama (#24), catálogo de bugs, lint e CI. A retenção protege documentos com publicação ativa. BNCC continua manual e não bloqueia publicação.
+
+Validação de uso simulada em navegador: duas questões do PDF fictício teste-banco-proprio-simulado.pdf, aprovação/publicação, recorte, página desconhecida, filtros combinados, seleção/exportação e rejeição de seleção desatualizada após reabrir uma questão. Tela de 390 px sem transbordamento horizontal; foco de teclado verificado. Não houve participantes humanos. A correção do proxy /questions resolveu resposta HTML na consulta; a seleção exibida é limpa quando a API detecta retirada de questão.
+
+Validação automatizada: suíte geral com 115 testes (113 aprovados e duas integrações optativas ignoradas); PostgreSQL isolado e OCR real executados separadamente. Lint e builds em ambos os módulos. Auditoria das dependências sem vulnerabilidades conhecidas após atualizações compatíveis. CI adicionada; execução remota só deve ser considerada aprovada após consulta ao GitHub Actions.
+
+Limites: associação visual automática depende de âncoras e layout identificáveis; ambiguidades ficam disponíveis para ajuste manual. Corpus é sintético e pequeno, não comprova precisão universal. Não inclui geração de avaliação formatada, integração com catálogo oficial BNCC, autenticação multiusuário nem painel pedagógico. Consulte database/README.md, docs/DIAGRAMA-DE-CLASSES.md, docs/CATALOGO-DE-BUGS.md e docs/TESTES-DE-TELA.md.
 # Ciclos de desenvolvimento — 04/11/2026
 
 ## Editor por componentes — 07/11/2026

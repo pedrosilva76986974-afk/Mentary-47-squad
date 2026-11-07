@@ -51,3 +51,21 @@ Resultado final do navegador: segunda questão concluída pelo Qwen, com área M
 Teste simulado pelo agente, sem participantes humanos. Foi gerado um PDF digital novo com questão de porcentagem e enviado pela API local; a tela de revisão solicitou a classificação automaticamente. No perfil final (Qwen3.5:2b e 16 camadas na GPU), foi observado status Concluída, Tempo de classificação: 4.9 s · Dentro da meta de 15 s, área Matemática, tipo Múltipla escolha, disciplina Matemática, tema Porcentagem, descritor Calcular uma porcentagem de um número e dificuldade Fácil. Série e BNCC permaneceram vazias; gabarito não foi inventado. Revisão permaneceu pendente, com alterações não salvas, para confirmação humana. Documento sintético: teste-meta-15s-isolado.pdf.
 
 Também foram registradas medições acima da meta ao usar servidor/modelo antigo ou manter outro modelo residente. O ganho observado não garante 15 segundos em todos os arquivos, sob concorrência ou no primeiro carregamento. A tela agora apresenta o tempo real e não informa sucesso da meta quando ela é excedida.
+
+## 2026-11-07 — Banco próprio, publicação e fontes visuais
+
+Ensaio pelo agente em navegador real, sem participantes humanos. PDF sintético teste-banco-proprio-simulado.pdf, revisão c30d48dd-eb71-4086-8bb5-09cb5261deeb, duas questões com quadrado vermelho e gráfico azul. Somente dados fictícios foram alterados.
+
+| Cenário | Resultado observado |
+| --- | --- |
+| Fonte da primeira questão | Recorte automático mostrou a figura correspondente; ajuste manual salvo |
+| Aprovação com gabarito e responsável | Confirmação de publicação no banco; BNCC vazia permitida |
+| Segunda questão sem página conhecida | Página desconhecida salva, mantendo documento e referência visual |
+| Consulta combinada por texto e Matemática | Duas questões esperadas apresentadas com alternativas e gabaritos |
+| Seleção e exportação | Duas questões revisadas e arquivo questoes-selecionadas.json baixado; conteúdo JSON conferido |
+| Filtro sem correspondência | Estado vazio com orientação exibido |
+| Retirar aprovação em outra aba | API bloqueou seleção antiga; nova pesquisa retornou somente a questão ainda aprovada |
+| Interface móvel 390 x 844 | Conteúdo sem transbordamento horizontal |
+| Teclado | Tab percorreu Pesquisar e Limpar filtros com foco |
+
+O ensaio encontrou duas falhas corrigidas: faltava proxy /questions no Vite (resposta HTML em vez de JSON) e a prévia de seleção antiga continuava visível após rejeição da API (agora é limpa). A exportação é JSON de questões selecionadas, não uma prova diagramada. Corpus automatizado adicional usa OCR real em PNG, JPEG e PDF escaneado; não substitui homologação com acervo amplo ou docentes.
