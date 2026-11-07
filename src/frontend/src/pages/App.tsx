@@ -113,6 +113,7 @@ function App() {
   const [result, setResult] = useState<UploadResult | null>(null);
   const [selectedQuestion, setSelectedQuestion] = useState(0);
   useEffect(() => setSelectedQuestion(0), [result?.origin.id]);
+  const [showUpload, setShowUpload] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showProcessingHint, setShowProcessingHint] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -153,7 +154,7 @@ function App() {
         if (!response.ok) throw new Error(payload.error || "Não foi possível carregar a revisão.");
         if (!cancelled) {
           setResult({ ...payload, questionCount: payload.questions.length, text: payload.sourceText ?? "", reviewUrl: `/documents/${encodeURIComponent(reviewId)}/review`, sourceUrl: `/documents/${encodeURIComponent(reviewId)}/source` });
-          setFeedback({ message: `Registro de revisão carregado: ${payload.origin.fileName}.`, kind: "success" });
+          setFeedback(null);
         }
       })
       .catch((error: unknown) => {
@@ -273,7 +274,7 @@ function App() {
         </nav>
       </header>
 
-      <main className="hero-layout">
+      <main className={`hero-layout${result ? " has-review" : ""}`}>
         <section className="hero-copy" aria-labelledby="page-title">
           <div className="eyebrow"><span aria-hidden="true" /> INOVAÇÃO EDUCACIONAL</div>
           <h1 id="page-title">Seus materiais,<br />prontos para <span>inovar.</span></h1>
@@ -285,7 +286,7 @@ function App() {
           <div className="formats-note">PDF · PNG · JPG <i aria-hidden="true" /> Arquivos de até 20 MB</div>
         </section>
 
-        <section className="upload-card" aria-labelledby="upload-title">
+        <section className="upload-card" aria-labelledby="upload-title" hidden={Boolean(result) && !showUpload}>
           <div className="card-heading">
             <div className="card-icon" aria-hidden="true"><span>↑</span></div>
             <div>
@@ -328,12 +329,12 @@ function App() {
             {busy && <button type="button" onClick={() => uploadCancellation.current?.abort()}>Cancelar envio e processamento</button>}
             {busy && showProcessingHint && (
               <p className="processing-hint" role="status" aria-live="polite">
-                Ainda estamos processando seu documento. Arquivos escaneados ou a análise pelo Ollama podem levar alguns minutos; se a IA exceder o limite, a identificação local será usada.
+                Ainda estamos lendo o documento. Arquivos escaneados podem demorar mais. Você pode cancelar o processamento a qualquer momento.
               </p>
             )}
           </form>
 
-          {feedback && <div className={`feedback ${feedback.kind}`} role="status" aria-live="polite">{feedback.message}</div>}
+          {!result && feedback && <div className={`feedback ${feedback.kind}`} role="status" aria-live="polite">{feedback.message}</div>}
           <p className="privacy-note"><span aria-hidden="true">◆</span> O documento é validado antes de ser processado.</p>
         </section>
 
@@ -342,8 +343,11 @@ function App() {
             <div className="review-heading">
               <div>
                 <p className="card-kicker">ETAPA DE REVISÃO</p>
-                <h2 id="review-title">Questões identificadas</h2>
-                <div className="analysis-toolbar" role="status" aria-live="polite">
+                <h1 id="review-title">Revisar questões</h1>
+                <p className="document-name">{result.origin.fileName}</p>
+                <div className="review-progress"><span>{result.questions.filter(q => q.status === "approved").length} aprovadas</span><span>{result.questions.filter(q => q.status === "pending_review").length} em revisão</span><span>{result.questions.filter(q => q.status === "rejected").length} rejeitadas</span></div>
+                <button className="new-document-button" type="button" onClick={() => setShowUpload(v => !v)}>{showUpload ? "Fechar envio" : "Enviar outro documento"}</button>
+                <details className="analysis-toolbar"><summary>Análise pedagógica por IA <span>{classification?.status === "completed" ? "Concluída" : classification?.status === "failed" ? "Precisa de atenção" : classification?.status === "cancelled" ? "Cancelada" : "Em andamento"}</span></summary><div role="status" aria-live="polite">
                   <p>Análise pedagógica: {result.questions.length === 0 ? "Nenhuma questão identificada; IA não será executada" : classification?.status === "cancelled" ? "cancelada" : classification?.status === "completed" ? "concluída — sugestões da IA para conferência" : classification?.status === "failed" ? classification.error : `em andamento (${classification?.suggestions.length ?? 0} classificadas); você já pode revisar as questões`}</p>
                   {(classification?.status === "running" || classification?.status === "queued") && <button type="button" onClick={async () => {
                     try {
@@ -354,7 +358,7 @@ function App() {
                   <p>BNCC sugerida pela IA, sem validação em catálogo oficial. Confira a habilidade, a etapa e a pertinência antes de registrá-la.</p>
                   {classification?.stale && <p>O conteúdo foi alterado após a análise. Solicite uma nova análise.</p>}
                   <button type="button" disabled={result.questions.length === 0 || classification?.status === "running" || classification?.status === "queued"} onClick={() => setAnalysisAttempt(n => n + 1)}>Analisar novamente</button>
-              </div>
+              </div></details>
                 <p className="review-summary">
                   {result.questionCount === 0
                     ? "O texto foi extraído, mas não encontramos enunciados com segurança suficiente."
@@ -381,6 +385,7 @@ function App() {
               <span className="review-count" aria-label={`${result.questionCount} questões`}>{result.questionCount}</span>
             </div>
 
+            {feedback && <div className={`feedback ${feedback.kind}`} role="status">{feedback.message}</div>}
             {result.questions.length > 0 ? (
               <div className="questions-list">
                 <nav className="question-navigation" aria-label="Navegar pelas questões">
@@ -401,6 +406,7 @@ function App() {
                           : `Páginas ${question.pageStart}–${question.pageEnd}`}
                       </span>
                     </div>
+                    <div className="question-columns"><div className="question-content">
                     {result.origin.id && result.origin.mimeType && (
                       <details className="question-source">
                         <summary>{question.visualReferences?.length ? "Ver elemento visual no documento original" : "Ver documento original nesta página"}</summary>
@@ -450,28 +456,6 @@ function App() {
                         </p>
                       )}
                     </section>
-                  {classification && classification.suggestions.length > 0 && classification.suggestions.filter(s => s.questionId === question.id).map(s => (
-                    <aside className="ai-suggestion" key={s.questionId} aria-label="Sugestão da IA para esta questão">
-                      <strong>Questão {result.questions.find(q => q.id === s.questionId)?.number ?? result.questions.findIndex(q => q.id === s.questionId) + 1}: {s.area || "Área indeterminada"}</strong>
-                      <p>{s.discipline} · {s.questionType} · Confiança informada pela IA: {s.confidence}</p>
-                      <p>BNCC sugerida: {s.bnccSkills.join(", ") || "Não identificada com segurança"}</p>
-                      <p>{s.rationale}</p>
-                      {s.warnings?.map(w => <p key={w} role="note">{w}</p>)}
-                      <button type="button" disabled={classification.stale || s.confidence === "low"} onClick={() => {
-                        const question = result.questions.find(q => q.id === s.questionId);
-                        if (!question) return;
-                        const draft = questionDraft(question);
-                        const pedagogy = draft.pedagogy;
-                        setQuestionDrafts(current => ({ ...current, [question.id]: { ...draft, pedagogy: {
-                          ...pedagogy, area: pedagogy.area || s.area, questionType: pedagogy.questionType || s.questionType,
-                          discipline: pedagogy.discipline || s.discipline,
-                          bnccSkills: pedagogy.bnccSkills?.length ? pedagogy.bnccSkills : s.bnccSkills,
-                        } } }));
-                        setFeedback({ message: "Sugestão copiada apenas para campos vazios. Confira a BNCC e salve a questão para registrar.", kind: "warning" });
-                      }}>Usar sugestão nos campos vazios</button>
-                    </aside>
-                  ))}
-
                     <details className="question-editor"><summary>Editar e revisar esta questão</summary>
                     <label className="question-edit-field">
                       <span>Editar enunciado</span>
@@ -489,6 +473,30 @@ function App() {
                         }} rows={Math.max(3, question.alternatives?.length ?? 0)} />
                       </label>
                     )}
+                    </details></div><aside className="question-inspector" aria-label="Revisão e classificação">
+                    <h3>Revisão da questão</h3>
+                  {classification && classification.suggestions.length > 0 && classification.suggestions.filter(s => s.questionId === question.id).map(s => (
+                    <aside className="ai-suggestion" key={s.questionId} aria-label="Sugestão da IA para esta questão">
+                      <strong>Questão {result.questions.find(q => q.id === s.questionId)?.number ?? result.questions.findIndex(q => q.id === s.questionId) + 1}: {s.area || "Área indeterminada"}</strong>
+                      <p>{s.discipline} · {s.questionType} · Confiança da sugestão: {s.confidence === "high" ? "alta" : s.confidence === "medium" ? "média" : "baixa"}</p>
+                      <p>BNCC sugerida: {s.bnccSkills.join(", ") || "Não identificada com segurança"}</p>
+                      <details className="suggestion-rationale"><summary>Entender esta sugestão</summary><p>{s.rationale}</p></details>
+                      {s.warnings?.map(w => <p key={w} role="note">{w}</p>)}
+                      <button type="button" disabled={classification.stale || s.confidence === "low"} onClick={() => {
+                        const question = result.questions.find(q => q.id === s.questionId);
+                        if (!question) return;
+                        const draft = questionDraft(question);
+                        const pedagogy = draft.pedagogy;
+                        setQuestionDrafts(current => ({ ...current, [question.id]: { ...draft, pedagogy: {
+                          ...pedagogy, area: pedagogy.area || s.area, questionType: pedagogy.questionType || s.questionType,
+                          discipline: pedagogy.discipline || s.discipline,
+                          bnccSkills: pedagogy.bnccSkills?.length ? pedagogy.bnccSkills : s.bnccSkills,
+                        } } }));
+                        setFeedback({ message: "Sugestão copiada apenas para campos vazios. Confira a BNCC e salve a questão para registrar.", kind: "warning" });
+                      }}>Usar sugestão nos campos vazios</button>
+                    </aside>
+                  ))}
+
                     {question.responseType === "multiple_choice" && (
                       <label className="question-edit-field">
                         <span>Selecione o gabarito</span>
@@ -525,7 +533,7 @@ function App() {
                       <button type="button" onClick={() => void saveQuestion(question, "approved")} disabled={savingQuestion !== null}>Aprovar</button>
                       <button type="button" onClick={() => void saveQuestion(question, "rejected")} disabled={savingQuestion !== null}>Rejeitar</button>
                     </div>
-                    </details>
+                    </aside></div>
                   </article>
                 ))}
               </div>

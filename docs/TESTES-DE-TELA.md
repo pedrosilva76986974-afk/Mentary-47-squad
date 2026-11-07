@@ -1,5 +1,9 @@
 # Homologação de interface — 07/11/2026
 
+## Segunda revisão visual
+
+Layout reorganizado em workspace, mantendo a identidade Mentary. Verificados em navegador: 1366 x 900 com conteúdo/inspector em duas colunas; 390 x 844 com painéis empilhados e sem rolagem horizontal. A edição e gravação de gabarito, responsável e área na questão fictícia 2 passaram. O novo envio abre e fecha pelo botão do cabeçalho. Foco por Tab e cabeçalho H1 conferidos. Sugestões e justificativas da IA ficam associadas à questão e os detalhes secundários são expansíveis. Não representa validação com usuários humanos ou auditoria completa de acessibilidade.
+
 Execução pelo agente em navegador real, com cenários de uso simulados. Não houve pesquisa ou teste com participantes humanos.
 
 Documento fictício criado para o ensaio: `teste-interface-simulado.pdf`, revisão `c545be21-7c5b-41da-996a-caf8949fd1aa`, duas questões aritméticas. A questão 1 foi aprovada com o responsável fictício `Revisor de teste simulado`. Nenhuma revisão do usuário foi editada por esses ensaios.

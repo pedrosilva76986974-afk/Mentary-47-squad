@@ -1,5 +1,11 @@
 # Ciclos de desenvolvimento — 04/11/2026
 
+## Reorganização UI/UX — 07/11/2026
+
+Após o upload, a apresentação institucional dá lugar à área de revisão. Marca, roxo, azul e verde Mentary foram preservados. Cabeçalho mostra documento e contadores de status; análise IA e detalhes técnicos ficam recolhidos. Conteúdo, fonte e edição textual ficam à esquerda em desktop; decisões de revisão, gabarito, classificação e ações ficam no painel direito. Até 1000 px os painéis passam para uma coluna. O formulário de novo envio abre por ação explícita, sem ocupar permanentemente o topo da revisão. Mensagens de salvamento aparecem no contexto da revisão, sem duplicação no formulário escondido.
+
+Homologação real no navegador: navegação à questão 2 do documento fictício, seleção de gabarito, edição de responsável e área, salvamento confirmado, abertura/fechamento do novo envio e foco por Tab. Conferidos 1366 px (duas colunas) e 390 px (uma coluna), sem transbordamento horizontal. Cabeçalho principal H1 e foco visível confirmados. Dados editados pertencem exclusivamente à revisão fictícia de teste. Não houve teste com participantes humanos.
+
 ## Interface e testes de uso simulados — 07/11/2026
 
 A #4 foi confirmada como atendida pelo responsável no GitHub; não permanece como bloqueio desta execução.
