@@ -1,5 +1,9 @@
 # Ciclos de desenvolvimento — 04/11/2026
 
+## Editor por componentes — 07/11/2026
+
+Substituído o textarea com sintaxe `rótulo | texto` por componente de edição estruturada. Categorias: 01 Enunciado, 02 Alternativas, 03 Gabarito/revisão e 04 Classificação pedagógica. Alternativas possuem campos próprios e botões para inclusão/remoção; o gabarito acompanha mudança de rótulo e é limpo quando sua opção é removida. Nenhuma alternativa restante é renumerada automaticamente. Alterações são locais até salvar e ficam sinalizadas. Validado em navegador com revisão fictícia, teclado e tela de 390 px. A identidade Mentary foi mantida.
+
 ## Reorganização UI/UX — 07/11/2026
 
 Após o upload, a apresentação institucional dá lugar à área de revisão. Marca, roxo, azul e verde Mentary foram preservados. Cabeçalho mostra documento e contadores de status; análise IA e detalhes técnicos ficam recolhidos. Conteúdo, fonte e edição textual ficam à esquerda em desktop; decisões de revisão, gabarito, classificação e ações ficam no painel direito. Até 1000 px os painéis passam para uma coluna. O formulário de novo envio abre por ação explícita, sem ocupar permanentemente o topo da revisão. Mensagens de salvamento aparecem no contexto da revisão, sem duplicação no formulário escondido.

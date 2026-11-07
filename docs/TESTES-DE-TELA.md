@@ -1,5 +1,9 @@
 # Homologação de interface — 07/11/2026
 
+## Edição por categorias
+
+Edição textual dividida em fieldsets Enunciado e Alternativas; gabarito/revisão e classificação pedagógica permanecem no painel próprio. Cada alternativa tem rótulo e texto independentes, com inclusão e remoção. Homologação no documento fictício: alterado rótulo B para C com gabarito acompanhando C; removida a alternativa correta e verificada seleção vazia; adicionada nova alternativa B, preenchida e salva. Conferidos campos individuais, teclado e 390 px sem transbordamento. Há aviso de alterações não salvas. Os testes unitários cobrem preservação da associação, remoção, rótulos numéricos e preservação de quebras de linha/barras no texto.
+
 ## Segunda revisão visual
 
 Layout reorganizado em workspace, mantendo a identidade Mentary. Verificados em navegador: 1366 x 900 com conteúdo/inspector em duas colunas; 390 x 844 com painéis empilhados e sem rolagem horizontal. A edição e gravação de gabarito, responsável e área na questão fictícia 2 passaram. O novo envio abre e fecha pelo botão do cabeçalho. Foco por Tab e cabeçalho H1 conferidos. Sugestões e justificativas da IA ficam associadas à questão e os detalhes secundários são expansíveis. Não representa validação com usuários humanos ou auditoria completa de acessibilidade.

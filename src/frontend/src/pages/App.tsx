@@ -1,3 +1,4 @@
+import { QuestionContentEditor } from "../components/QuestionContentEditor.js";
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 import { getMissingAnswerMessage, getResponseTypeLabel } from "../utils/question-presentation.js";
 import { readApiResponse } from "../utils/api-response.js";
@@ -400,6 +401,7 @@ function App() {
                   <article className="question-item" key={question.id}>
                     <div className="question-meta">
                       <span className="question-label">Questão {question.number ?? index + 1}</span>
+                      {questionDrafts[question.id] && <span className="unsaved-badge">Alterações não salvas</span>}
                       <span className="question-page">
                         {question.pageStart === question.pageEnd
                           ? `Página ${question.pageStart}`
@@ -456,25 +458,9 @@ function App() {
                         </p>
                       )}
                     </section>
-                    <details className="question-editor"><summary>Editar e revisar esta questão</summary>
-                    <label className="question-edit-field">
-                      <span>Editar enunciado</span>
-                      <textarea value={questionDraft(question).prompt} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), prompt: value } })); }} rows={3} />
-                    </label>
-                    {(question.alternatives && question.alternatives.length > 0 || question.responseType === "multiple_choice") && (
-                      <label className="question-edit-field">
-                        <span>Editar alternativas (uma por linha: rótulo | texto)</span>
-                        <textarea value={questionDraft(question).alternatives.map((item) => `${item.label} | ${item.text}`).join("\n")} onChange={(event) => {
-                          const alternatives = event.currentTarget.value.split(/\r?\n/).filter((line) => line.trim()).map((line, index) => {
-                            const [label, ...textParts] = line.split("|");
-                            return { label: label?.trim() || String.fromCharCode(65 + index), text: textParts.join("|").trim() || line.trim() };
-                          });
-                          setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), alternatives } }));
-                        }} rows={Math.max(3, question.alternatives?.length ?? 0)} />
-                      </label>
-                    )}
-                    </details></div><aside className="question-inspector" aria-label="Revisão e classificação">
-                    <h3>Revisão da questão</h3>
+                    <QuestionContentEditor content={questionDraft(question)} onChange={change => setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), ...change } }))} />
+                    </div><aside className="question-inspector" aria-label="Revisão e classificação">
+                    <h3>03 · Gabarito e revisão</h3>
                   {classification && classification.suggestions.length > 0 && classification.suggestions.filter(s => s.questionId === question.id).map(s => (
                     <aside className="ai-suggestion" key={s.questionId} aria-label="Sugestão da IA para esta questão">
                       <strong>Questão {result.questions.find(q => q.id === s.questionId)?.number ?? result.questions.findIndex(q => q.id === s.questionId) + 1}: {s.area || "Área indeterminada"}</strong>
@@ -502,15 +488,15 @@ function App() {
                         <span>Selecione o gabarito</span>
                         <select value={questionDraft(question).answerKey ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), answerKey: value || null } })); }}>
                           <option value="">Selecione uma alternativa</option>
-                          {questionDraft(question).alternatives.map((alternative) => (
-                            <option key={alternative.label} value={alternative.label}>{alternative.label} — {alternative.text}</option>
+                          {questionDraft(question).alternatives.map((alternative, alternativeIndex) => (
+                            <option key={alternativeIndex} value={alternative.label}>{alternative.label} — {alternative.text}</option>
                           ))}
                         </select>
                       </label>
                     )}
                     {question.answerKey && <p className="question-answer-empty"><strong>Gabarito registrado:</strong> {question.answerKey}</p>}
                     <details className="question-pedagogy">
-                      <summary>Classificação pedagógica</summary>
+                      <summary>04 · Classificação pedagógica</summary>
                       <label className="question-edit-field"><span>Área do conhecimento</span><input value={questionDraft(question).pedagogy.area ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, area: value } } })); }} /></label>
                       <label className="question-edit-field"><span>Tipo de questão</span><input value={questionDraft(question).pedagogy.questionType ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, questionType: value } } })); }} /></label>
                       <div className="pedagogy-fields">
