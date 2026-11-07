@@ -7,13 +7,15 @@
     "dev": "vite --host 0.0.0.0",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "typecheck": "tsc --noEmit --pretty"
+    "typecheck": "tsc --noEmit --pretty",
+    "lint": "biome lint ."
   },
   "dependencies": {
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.6",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.1",

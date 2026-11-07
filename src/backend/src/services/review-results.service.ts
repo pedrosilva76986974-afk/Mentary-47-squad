@@ -1,3 +1,5 @@
+import { regionMatchesQuestion } from "./question-regions.service.js";
+import { validateRegion } from "./source-preview.service.js";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { DocumentOrigin } from "./document-origin.service.js";
@@ -35,7 +37,7 @@ type ReviewQuestion = ParsedQuestion & {
 };
 
 type ReviewQuestionUpdate = Partial<Pick<ReviewQuestion,
-  "prompt" | "answerKey" | "alternatives" | "status" | "pedagogy" | "reviewedBy"
+  "prompt" | "answerKey" | "alternatives" | "status" | "pedagogy" | "reviewedBy" | "pageStart" | "pageEnd" | "visualReferences"
 >>;
 
 type PedagogyMetadata = NonNullable<ReviewQuestion["pedagogy"]>;
@@ -57,7 +59,8 @@ function findQuestionVisualReferences(
   question: Pick<ReviewQuestion, "pageStart" | "pageEnd">,
   visualPages: VisualPageReference[] = [],
 ): VisualPageReference[] {
-  return visualPages.filter(({ page }) => page >= question.pageStart && page <= question.pageEnd);
+  if (question.pageStart === null || question.pageEnd === null) return [];
+  return visualPages.filter(({ page }) => page >= question.pageStart! && page <= question.pageEnd!);
 }
 
 function reviewDirectory(): string {
@@ -68,10 +71,11 @@ function normalizeReviewResult(review: ReviewResult): ReviewResult {
   review.questions = review.questions.map((question) => {
     delete (question as ReviewQuestion & { answer?: unknown }).answer;
     question.responseType = "multiple_choice";
+    if (question.pageStart == null || question.pageEnd == null) { question.pageStart = null; question.pageEnd = null; }
     const missingComponents = new Set(question.missingComponents ?? []);
     if (question.prompt?.trim()) missingComponents.delete("prompt");
     else missingComponents.add("prompt");
-    if ((question.alternatives?.length ?? 0) >= 2) missingComponents.delete("alternatives");
+    if ((question.alternatives?.length ?? 0) >= 2 && question.alternatives!.every(a=>a.label.trim()&&a.text.trim()) && new Set(question.alternatives!.map(a=>a.label.trim().toUpperCase())).size===question.alternatives!.length) missingComponents.delete("alternatives");
     else missingComponents.add("alternatives");
     const answerKey = question.answerKey?.trim().toLocaleUpperCase("pt-BR");
     if (answerKey && question.alternatives?.some((alternative) => alternative.label.trim().toLocaleUpperCase("pt-BR") === answerKey)) {
@@ -96,8 +100,16 @@ async function saveReviewResult(
     throw new DocumentProcessingError("Não foi possível reconhecer texto no documento. Verifique a qualidade do arquivo e tente novamente.");
   }
 
+  const matchedRegions = (extraction.questionRegions ?? []).filter(region => parsedQuestions.some(question =>
+    question.pageStart !== null && question.pageEnd !== null && region.page >= question.pageStart && region.page <= question.pageEnd && regionMatchesQuestion(region,question)));
   const questions: ReviewQuestion[] = parsedQuestions.map((question, index) => {
-    const visualReferences = findQuestionVisualReferences(question, extraction.visualPages);
+    const visualReferences = findQuestionVisualReferences(question, extraction.visualPages).map(reference => {
+      const regions = matchedRegions.filter(region => region.page === reference.page && regionMatchesQuestion(region, question));
+      if (regions.length !== 1) return { ...reference, association: "unconfirmed" as const };
+      const current = regions[0]!;
+      const next = matchedRegions.filter(candidate => candidate.page === current.page && candidate.region.x === current.region.x && candidate.region.y > current.region.y + .005).sort((a,b)=>a.region.y-b.region.y)[0];
+      return { ...reference, region: { ...current.region, height: (next?.region.y ?? 1) - current.region.y }, association: "automatic" as const };
+    });
     return {
       ...question,
       id: `${origin.id}-q${index + 1}`,
@@ -169,6 +181,20 @@ async function updateReviewQuestion(
   }
 
   const question = { ...review.questions[questionIndex]! };
+  if ("pageStart" in update || "pageEnd" in update) {
+    const start = update.pageStart, end = update.pageEnd;
+    if (!(start === null && end === null) && (!Number.isInteger(start) || !Number.isInteger(end) || Number(start) < 1 || Number(end) < Number(start) || Number(end) > review.pages)) throw new DocumentValidationError("Informe as duas páginas válidas ou marque a página como desconhecida.");
+    question.pageStart = start!; question.pageEnd = end!;
+  }
+  if ("visualReferences" in update) {
+    if (!Array.isArray(update.visualReferences) || update.visualReferences.length > 20) throw new DocumentValidationError("Referências visuais inválidas.");
+    question.visualReferences = update.visualReferences.map(value => {
+      if (!value || !Number.isInteger(value.page) || value.page < 1 || value.page > review.pages || !["image","graphic"].includes(value.kind)) throw new DocumentValidationError("Página do elemento visual inválida.");
+      if (value.region) validateRegion(value.region);
+      return { page: value.page, kind: value.kind, ...(value.region ? { region: value.region } : {}), association: "manual" as const };
+    });
+  }
+
   if ("prompt" in update) {
     if (typeof update.prompt !== "string" || !update.prompt.trim()) throw new DocumentValidationError("O enunciado não pode ficar vazio.");
     question.prompt = update.prompt.trim();

@@ -1,0 +1,127 @@
+{
+  "profile": "compact-v1",
+  "model": "qwen3.5:0.8b",
+  "date": "2026-11-07T06:07:14.867Z",
+  "targetMs": 15000,
+  "scope": "Tempo da chamada local até JSON validado; exclui fila e polling da tela. Amostra sintética pequena; não garante acurácia pedagógica geral.",
+  "warmup": {
+    "durationMs": 10261,
+    "classification": {
+      "questionIndex": 0,
+      "area": "Matemática",
+      "discipline": "Matemática",
+      "questionType": "Múltipla escolha",
+      "grade": "",
+      "topic": "Adição de números",
+      "descriptor": "Soma de dois números",
+      "difficulty": "easy",
+      "processingMs": 10259,
+      "loadMs": 8809,
+      "targetMet": true
+    }
+  },
+  "results": [
+    {
+      "name": "matematica",
+      "durationMs": 1119,
+      "classification": {
+        "questionIndex": 0,
+        "area": "Matemática",
+        "discipline": "Matemática",
+        "questionType": "Múltipla escolha",
+        "grade": "",
+        "topic": "20% de 150",
+        "descriptor": "30",
+        "difficulty": "medium",
+        "processingMs": 1119,
+        "loadMs": 17,
+        "targetMet": true
+      },
+      "qualityPassed": true,
+      "targetMet": true
+    },
+    {
+      "name": "historia",
+      "durationMs": 1311,
+      "classification": {
+        "questionIndex": 0,
+        "area": "Ciências Humanas",
+        "discipline": "História",
+        "questionType": "Múltipla escolha",
+        "grade": "vazia",
+        "topic": "Independência política do Brasil em 1822",
+        "descriptor": "Proclamação da República",
+        "difficulty": "easy",
+        "processingMs": 1311,
+        "loadMs": 10,
+        "targetMet": true
+      },
+      "qualityPassed": false,
+      "targetMet": true
+    },
+    {
+      "name": "portugues",
+      "durationMs": 1436,
+      "classification": {
+        "questionIndex": 0,
+        "area": "Matemática",
+        "discipline": "Matemática",
+        "questionType": "Múltipla escolha",
+        "grade": "",
+        "topic": "Aqui não há tema específico para a questão.",
+        "descriptor": "Não há competência definida na pergunta.",
+        "difficulty": "hard",
+        "processingMs": 1435,
+        "loadMs": 10,
+        "targetMet": true
+      },
+      "qualityPassed": false,
+      "targetMet": true
+    },
+    {
+      "name": "biologia",
+      "durationMs": 1168,
+      "classification": {
+        "questionIndex": 0,
+        "area": "Matemática",
+        "discipline": "Matemática",
+        "questionType": "Múltipla escolha",
+        "grade": "",
+        "topic": "Respiração Aeróbica",
+        "descriptor": "Produção de ATP",
+        "difficulty": "hard",
+        "processingMs": 1168,
+        "loadMs": 10,
+        "targetMet": true
+      },
+      "qualityPassed": false,
+      "targetMet": true
+    },
+    {
+      "name": "informatica",
+      "durationMs": 1207,
+      "classification": {
+        "questionIndex": 0,
+        "area": "Matemática",
+        "discipline": "Matemática",
+        "questionType": "Múltipla escolha",
+        "grade": "",
+        "topic": "Arquitetura de Computadores",
+        "descriptor": "Unidade Lógica e Aritmética",
+        "difficulty": "hard",
+        "processingMs": 1207,
+        "loadMs": 11,
+        "targetMet": true
+      },
+      "qualityPassed": false,
+      "targetMet": true
+    }
+  ],
+  "summary": {
+    "cases": 5,
+    "withinTarget": 5,
+    "qualityPassed": 1,
+    "p50Ms": 1207,
+    "p95Ms": 1436
+  }
+}

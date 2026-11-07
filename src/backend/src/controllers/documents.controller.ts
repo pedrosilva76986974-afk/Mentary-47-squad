@@ -1,3 +1,4 @@
+import { getDatabasePool, isDatabaseConfigured } from "../services/database.service.js";
 import type { Request, Response, NextFunction } from "express";
 import { extractDocument } from "../services/document-extraction.service.js";
 import { getStoredDocument, recordDocumentOrigin, removeDocumentOrigin } from "../services/document-origin.service.js";
@@ -69,6 +70,12 @@ async function uploadAndExtract(req: Request, res: Response, next: NextFunction)
   }
 }
 
+async function withPublication(review: ReviewResult) {
+  if (!isDatabaseConfigured()) return review;
+  const rows = await getDatabasePool().query("SELECT review_question_id FROM banco.question_sources WHERE document_id=$1 AND active",[review.documentId]);
+  return { ...review, publishedQuestionIds: rows.rows.map(row=>String(row.review_question_id)) };
+}
+
 async function getDocumentReview(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const parameter = req.params.documentId;
@@ -78,7 +85,7 @@ async function getDocumentReview(req: Request, res: Response, next: NextFunction
       res.status(404).json({ error: "Resultado de revisão não encontrado." });
       return;
     }
-    res.json(review);
+    res.json(await withPublication(review));
   } catch (error) {
     next(error);
   }
@@ -95,7 +102,7 @@ async function updateDocumentReviewQuestion(req: Request, res: Response, next: N
       res.status(404).json({ error: "Questão ou registro de revisão não encontrado." });
       return;
     }
-    res.json(review);
+    res.json(await withPublication(review));
   } catch (error) {
     next(error);
   }

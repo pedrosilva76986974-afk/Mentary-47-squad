@@ -17,6 +17,17 @@ function getPageLines(pageText: string): string[] {
   };
 
   return lines.map((line, index) => {
+    // OCR can read a closing parenthesis as J/I/l. Require neighboring option labels.
+    const broken = line.match(/^(\s*)([A-Ja-j])[JIl|]\s*(\S.*)$/);
+    if (broken) {
+      const letter = broken[2]!.toUpperCase().charCodeAt(0);
+      const before = lines.slice(0,index).filter(value=>value.trim()).reverse();
+      const after = lines.slice(index+1).filter(value=>value.trim());
+      const previous = label(before[0]??"")?.charCodeAt(0), next = label(after[0]??"")?.charCodeAt(0);
+      if ((next===letter+1 && (previous===letter-1 || label(after[1]??"")?.charCodeAt(0)===letter+2))
+        || (previous===letter-1 && label(before[1]??"")?.charCodeAt(0)===letter-2)) return broken[1]+broken[2]+") "+broken[3];
+    }
+
     const current = line.match(/^(\s*)([14])([).:-]\s*\S.*)$/);
     if (current && label(lines[index + 1] ?? "") === "B") {
       return `${current[1]}A${current[3]}`;

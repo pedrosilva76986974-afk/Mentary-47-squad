@@ -1,3 +1,4 @@
+import type { PositionedText } from "./question-regions.service.js";
 import { createWorker } from "tesseract.js";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { abortable } from "./cancellation.js";
@@ -70,7 +71,7 @@ function orderOcrBlocks(blocks: OcrBlock[] | null | undefined): string {
   return ordered.join("\n");
 }
 
-async function recognizeImage(image: Buffer, signal?: AbortSignal): Promise<string> {
+async function recognizeImageWithLayout(image: Buffer, signal?: AbortSignal): Promise<{ text: string; lines: PositionedText[] }> {
   signal?.throwIfAborted();
   workerPromise ??= createWorker("por");
   const current = workerPromise;
@@ -84,8 +85,15 @@ async function recognizeImage(image: Buffer, signal?: AbortSignal): Promise<stri
     const preparedImage = await abortable(prepareImageForOcr(image), signal);
     signal?.throwIfAborted();
     const result = await abortable(worker.recognize(preparedImage, {}, { text: true, blocks: true }), signal);
-    return orderOcrBlocks(result.data.blocks) || result.data.text.trim();
+    const raster = await loadImage(preparedImage);
+    const lines = (result.data.blocks ?? []).flatMap(block => block.paragraphs.flatMap(paragraph => paragraph.lines.map(line => ({
+      text: line.text.trim(), x: line.bbox.x0 / raster.width, y: line.bbox.y0 / raster.height,
+      width: (line.bbox.x1 - line.bbox.x0) / raster.width, height: (line.bbox.y1 - line.bbox.y0) / raster.height,
+    }))));
+    return { text: orderOcrBlocks(result.data.blocks) || result.data.text.trim(), lines };
   } finally { signal?.removeEventListener("abort", cancel); }
 }
 
-export { orderOcrBlocks, prepareImageForOcr, recognizeImage };
+async function recognizeImage(image: Buffer, signal?: AbortSignal): Promise<string> { return (await recognizeImageWithLayout(image, signal)).text; }
+async function closeOcrWorker(): Promise<void> { const current = workerPromise; workerPromise = undefined; if(current) await (await current).terminate(); }
+export { closeOcrWorker, orderOcrBlocks, prepareImageForOcr, recognizeImage, recognizeImageWithLayout };

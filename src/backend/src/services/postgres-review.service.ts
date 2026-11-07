@@ -1,3 +1,4 @@
+import { syncQuestionBank } from "./question-bank.service.js";
 import type { PoolClient } from "pg";
 import type { ReviewQuestion, ReviewResult } from "./review-results.service.js";
 import { getDatabasePool } from "./database.service.js";
@@ -60,6 +61,7 @@ async function writeReviewResult(result: ReviewResult, insertOnly: boolean): Pro
     for (const [position, question] of result.questions.entries()) {
       await insertReviewQuestion(client, result.documentId, question, position);
     }
+    await syncQuestionBank(client, result);
     await client.query("COMMIT");
     return true;
   } catch (error) {
@@ -113,8 +115,8 @@ async function getReviewResultFromDatabase(documentId: string): Promise<ReviewRe
     responseType: "multiple_choice",
     alternatives: alternativesByQuestion.get(String(row.question_id)) ?? [],
     missingComponents: row.missing_components as ReviewQuestion["missingComponents"],
-    pageStart: Number(row.page_start),
-    pageEnd: Number(row.page_end),
+    pageStart: row.page_start === null ? null : Number(row.page_start),
+    pageEnd: row.page_end === null ? null : Number(row.page_end),
     confidence: row.confidence as ReviewQuestion["confidence"],
     status: row.status as ReviewQuestion["status"],
     ...(row.pedagogy ? { pedagogy: row.pedagogy as ReviewQuestion["pedagogy"] } : {}),

@@ -1,3 +1,4 @@
+import { getDatabasePool, initializeDatabase, isDatabaseConfigured } from "./database.service.js";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { removeDocumentOrigin, type DocumentOrigin } from "./document-origin.service.js";
@@ -30,11 +31,18 @@ async function cleanupExpiredDocuments(now = Date.now()): Promise<number> {
   if (!Array.isArray(records)) throw new Error("Registro de documentos inválido.");
 
   const cutoff = now - retentionDays * DAY_IN_MS;
-  const expiredIds = records
+  let expiredIds = records
     .filter((record) => record && documentIdPattern.test(record.id)
       && Number.isFinite(Date.parse(record.uploadedAt))
       && Date.parse(record.uploadedAt) < cutoff)
     .map((record) => record.id);
+  if (expiredIds.length === 0) return 0;
+  if (isDatabaseConfigured()) {
+    await initializeDatabase();
+    const protectedRows = await getDatabasePool().query("SELECT DISTINCT document_id FROM banco.question_sources WHERE active AND document_id=ANY($1::uuid[])",[expiredIds]);
+    const protectedIds = new Set(protectedRows.rows.map(row=>String(row.document_id)));
+    expiredIds = expiredIds.filter(id=>!protectedIds.has(id));
+  }
   if (expiredIds.length === 0) return 0;
 
   await Promise.all(expiredIds.map((id) => removeReviewResult(id)));

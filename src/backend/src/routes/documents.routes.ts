@@ -1,3 +1,5 @@
+import { getStoredDocument } from "../services/document-origin.service.js";
+import { renderSourcePreview } from "../services/source-preview.service.js";
 import { Router } from "express";
 import multer from "multer";
 import { getDocumentReview, getDocumentSource, updateDocumentReviewQuestion, uploadAndExtract } from "../controllers/documents.controller.js";
@@ -22,6 +24,13 @@ const upload = multer({
 router.post("/", limitConcurrentUploads, upload.single("document"), uploadAndExtract);
 router.get("/:documentId/review", getDocumentReview);
 router.get("/:documentId/source", getDocumentSource);
+router.get("/:documentId/preview", async (req, res) => {
+  const document = await getStoredDocument(String(req.params.documentId));
+  if (!document) { res.status(404).json({ error: "Documento original indisponível ou expirado." }); return; }
+  const value = (key: string, fallback: number) => req.query[key] === undefined ? fallback : Number(req.query[key]);
+  const image = await renderSourcePreview(document.content, document.origin.mimeType, value("page",1), { x: value("x",0), y: value("y",0), width: value("width",1), height: value("height",1) });
+  res.type("png").send(image);
+});
 router.post("/:documentId/classification", async (req, res) => {
   const job = await startClassification(String(req.params.documentId));
   if (!job) { res.status(404).json({ error: "Revisão não encontrada." }); return; }

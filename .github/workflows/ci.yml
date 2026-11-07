@@ -1,0 +1,54 @@
+name: Verificações do projeto
+on:
+  pull_request:
+  push:
+    branches: [main, pedro-backend]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mentary_ci
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: mentary_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U mentary_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            src/backend/package-lock.json
+            src/frontend/package-lock.json
+      - run: npm ci
+        working-directory: src/backend
+      - run: npm ci
+        working-directory: src/frontend
+      - run: npm run lint && npm run build
+        working-directory: src/backend
+      - run: npm run lint && npm run build
+        working-directory: src/frontend
+      - run: node --import tsx --test --test-force-exit test/*.test.ts
+        working-directory: src/backend
+        env:
+          DATABASE_URL: ""
+          MENTARY_POSTGRES_TEST: "0"
+          MENTARY_OCR_TEST: "0"
+      - run: node --import tsx --test test/postgres.integration.test.ts
+        working-directory: src/backend
+        env:
+          DATABASE_URL: postgresql://mentary_ci:ci_only_password@localhost:5432/mentary_ci
+          MENTARY_POSTGRES_TEST: "1"
+      - run: node --import tsx --test test/ocr-corpus.integration.test.ts
+        working-directory: src/backend
+        env:
+          DATABASE_URL: ""
+          MENTARY_OCR_TEST: "1"
