@@ -214,3 +214,11 @@ A primeira execução remota revelou uma corrida preexistente: uma tarefa com st
 ## Corpus OCR portátil — CI Linux
 
 A geração sintética com Arial dependia de fonte instalada no Windows e produziu texto incompleto no runner Linux. O corpus passou a rasterizar Helvetica padrão via PDF.js, usando os recursos de fontes do projeto. Mantidos todos os critérios do OCR real em PNG, JPEG e PDF escaneado. A nova amostra também revelou AJ5 sem espaço; a recuperação contextual agora aceita esse formato somente junto de alternativas vizinhas válidas. Regressão negativa de texto AI 5 permanece.
+
+## Navegação preserva envio e revisão — 07/11/2026
+
+Os links Enviar material e Banco de questões agora usam navegação interna. O componente de envio/revisão permanece montado: arquivo selecionado, requisição em andamento, resultado, questão selecionada, classificação e rascunhos locais sobrevivem à troca de tela. Voltar/avançar do navegador acompanha a tela pelo evento popstate. Links externos, abertura modificada/nova aba e links diretos de revisão mantêm comportamento normal. Ao entrar no banco, a consulta é renovada para mostrar novas aprovações.
+
+Validado em navegador com mentary-navegacao-simulado.pdf: selecionar arquivo, ir ao banco e retornar; enviar e sair durante a requisição; voltar à revisão com questão, alternativas e gabarito; editar responsável sem salvar, navegar ao banco e voltar pelo histórico, preservando rascunho e aviso de alterações. A classificação concluiu e preencheu os campos durante o ensaio. Lint e build frontend passaram. Não houve edição de documentos do usuário nem participantes humanos.
+
+Escopo: preservação durante a navegação interna na mesma aba. Recarregar a página, fechar a aba ou abrir links diretos continua iniciando outra instância; rascunhos não salvos não são persistidos em banco por esta alteração.

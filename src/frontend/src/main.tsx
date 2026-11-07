@@ -1,7 +1,6 @@
-import { QuestionBank } from "./pages/QuestionBank.js";
+import { Workspace } from "./components/Workspace.js";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./pages/App";
 import "../styles.css";
 
 const rootElement = document.getElementById("root");
@@ -12,6 +11,6 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    {new URLSearchParams(window.location.search).has("bank") ? <QuestionBank /> : <App />}
+    <Workspace />
   </StrictMode>,
 );

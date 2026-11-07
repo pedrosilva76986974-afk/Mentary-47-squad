@@ -15,6 +15,7 @@ Os casos abaixo foram simulados com dados sintéticos e possuem verificações r
 | OCR-02 | PDF escaneado, PNG e JPEG com gabarito impresso | Duas questões, três opções cada, gabaritos e regiões preservados | ocr-corpus.integration.test.ts, OCR português real |
 | WEB-01 | Consultar /questions pelo Vite | Encaminhar à API, evitando HTML com HTTP 200 | vite.config.ts e teste de tela |
 | WEB-02 | Repetir a mesma pesquisa após erro | Nova tentativa mesmo sem alterar filtros | QuestionBank.tsx e teste de tela |
+| WEB-03 | Selecionar/enviar arquivo, abrir Banco e voltar para Enviar material | Arquivo, processamento, revisão e edições locais preservados na navegação interna | Workspace.tsx e docs/TESTES-DE-TELA.md |
 | INTEGRIDADE-01 | Aprovar sem gabarito/revisor ou editar aprovação deixando-a inválida | Bloquear atualização e preservar registro anterior | documents.test.ts |
 | IA-01 | Timeout, cancelamento e resultado tardio | Preservar parciais; retomar somente pendentes; duração inclui tentativa falha | ollama.test.ts |
 | IA-02 | Nova tentativa imediatamente após falha, antes da gravação final | Somente queued/running bloqueiam nova tarefa; resposta não reutiliza falha terminal | ollama.test.ts e CI Linux |

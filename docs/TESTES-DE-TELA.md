@@ -69,3 +69,11 @@ Ensaio pelo agente em navegador real, sem participantes humanos. PDF sintético 
 | Teclado | Tab percorreu Pesquisar e Limpar filtros com foco |
 
 O ensaio encontrou duas falhas corrigidas: faltava proxy /questions no Vite (resposta HTML em vez de JSON) e a prévia de seleção antiga continuava visível após rejeição da API (agora é limpa). A exportação é JSON de questões selecionadas, não uma prova diagramada. Corpus automatizado adicional usa OCR real em PNG, JPEG e PDF escaneado; não substitui homologação com acervo amplo ou docentes.
+
+## Navegação preserva envio e revisão — 07/11/2026
+
+Os links Enviar material e Banco de questões agora usam navegação interna. O componente de envio/revisão permanece montado: arquivo selecionado, requisição em andamento, resultado, questão selecionada, classificação e rascunhos locais sobrevivem à troca de tela. Voltar/avançar do navegador acompanha a tela pelo evento popstate. Links externos, abertura modificada/nova aba e links diretos de revisão mantêm comportamento normal. Ao entrar no banco, a consulta é renovada para mostrar novas aprovações.
+
+Validado em navegador com mentary-navegacao-simulado.pdf: selecionar arquivo, ir ao banco e retornar; enviar e sair durante a requisição; voltar à revisão com questão, alternativas e gabarito; editar responsável sem salvar, navegar ao banco e voltar pelo histórico, preservando rascunho e aviso de alterações. A classificação concluiu e preencheu os campos durante o ensaio. Lint e build frontend passaram. Não houve edição de documentos do usuário nem participantes humanos.
+
+Escopo: preservação durante a navegação interna na mesma aba. Recarregar a página, fechar a aba ou abrir links diretos continua iniciando outra instância; rascunhos não salvos não são persistidos em banco por esta alteração.
