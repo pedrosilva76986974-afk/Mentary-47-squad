@@ -1,5 +1,7 @@
 # Homologação de interface — 07/11/2026
 
+Ensaio mais recente: [teste de uso simulado de 12/11/2026](RELATORIO-TESTE-USO-2026-11-12.md), com envio, OCR, revisão, classificação, publicação, exportação, cancelamentos e correções observadas no navegador.
+
 ## Edição por categorias
 
 Edição textual dividida em fieldsets Enunciado e Alternativas; gabarito/revisão e classificação pedagógica permanecem no painel próprio. Cada alternativa tem rótulo e texto independentes, com inclusão e remoção. Homologação no documento fictício: alterado rótulo B para C com gabarito acompanhando C; removida a alternativa correta e verificada seleção vazia; adicionada nova alternativa B, preenchida e salva. Conferidos campos individuais, teclado e 390 px sem transbordamento. Há aviso de alterações não salvas. Os testes unitários cobrem preservação da associação, remoção, rótulos numéricos e preservação de quebras de linha/barras no texto.

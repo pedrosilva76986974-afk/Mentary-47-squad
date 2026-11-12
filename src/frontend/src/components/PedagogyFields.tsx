@@ -1,4 +1,5 @@
 import type { Question } from "../types/review.js";
+import { useEffect, useState } from "react";
 
 type Pedagogy = NonNullable<Question["pedagogy"]>;
 type Props = {
@@ -17,7 +18,19 @@ const detailFields = [
   { key: "topic", label: "Tema" },
 ] as const;
 
+function parseBnccText(value: string): string[] {
+  return value.split(",").map(item => item.trim()).filter(Boolean);
+}
+
 export function PedagogyFields({ pedagogy, onChange }: Props) {
+  // Preserve a comma while typing the next code; normalize only on blur or save.
+  const [bnccText, setBnccText] = useState(() => pedagogy.bnccSkills?.join(", ") ?? "");
+  useEffect(() => {
+    const stored = pedagogy.bnccSkills ?? [];
+    if (JSON.stringify(stored) !== JSON.stringify(parseBnccText(bnccText))) {
+      setBnccText(stored.join(", "));
+    }
+  }, [pedagogy.bnccSkills, bnccText]);
   function textField(field: { key: Exclude<keyof Pedagogy, "bnccSkills" | "difficulty">; label: string }) {
     return (
       <label className="question-edit-field" key={field.key}>
@@ -38,15 +51,13 @@ export function PedagogyFields({ pedagogy, onChange }: Props) {
         <label className="question-edit-field">
           <span>Habilidades BNCC (separadas por vírgula)</span>
           <input
-            value={pedagogy.bnccSkills?.join(", ") ?? ""}
-            onChange={(event) =>
-              onChange({
-                bnccSkills: event.currentTarget.value
-                  .split(",")
-                  .map((item) => item.trim())
-                  .filter(Boolean),
-              })
-            }
+            value={bnccText}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setBnccText(value);
+              onChange({ bnccSkills: parseBnccText(value) });
+            }}
+            onBlur={() => setBnccText(pedagogy.bnccSkills?.join(", ") ?? "")}
           />
         </label>
         {textField({ key: "descriptor", label: "Descritor" })}

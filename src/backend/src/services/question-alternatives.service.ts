@@ -108,3 +108,13 @@ function extractQuestionAlternatives(
 }
 
 export { extractQuestionAlternatives };
+
+/** A gap in a conventional A..J or 1..9 sequence may indicate an OCR omission. */
+export function hasAlternativeLabelGaps(alternatives: Array<{ label: string }>): boolean {
+  const labels = alternatives.map(item => item.label.trim().toUpperCase());
+  const letters = labels.every(label => /^[A-J]$/.test(label));
+  const numbers = labels.every(label => /^[1-9]$/.test(label));
+  if (!letters && !numbers) return false;
+  const values = [...new Set(labels.map(label => letters ? label.charCodeAt(0) - 64 : Number(label)))].sort((a, b) => a - b);
+  return values[0] === 1 && values.some((value, index) => index > 0 && value > values[index - 1]! + 1);
+}

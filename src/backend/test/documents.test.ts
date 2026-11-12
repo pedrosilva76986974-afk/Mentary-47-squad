@@ -304,6 +304,23 @@ test("simultaneous edits to separate questions preserve both changes in the same
   ]);
 });
 
+test("an OCR-style alternative gap stays flagged until human approval confirms the content", async () => {
+  const upload = await request(app).post("/documents")
+    .attach("document", await createPdf("Questão 1: Quanto é 2 + 2? A) 3 C) 5"), {
+      filename: "missing-middle-choice.pdf", contentType: "application/pdf",
+    });
+  assert.equal(upload.status, 200);
+  const url = `${upload.body.reviewUrl}/questions/${upload.body.questions[0].id}`;
+  const reopened = await request(app).get(upload.body.reviewUrl);
+  assert.ok(reopened.body.questions[0].missingComponents.includes("alternatives"));
+  const pending = await request(app).patch(url).send({ reviewedBy: "Revisor fictício" });
+  assert.equal(pending.status, 200);
+  assert.ok(pending.body.questions[0].missingComponents.includes("alternatives"));
+  const confirmed = await request(app).patch(url).send({ status: "approved", answerKey: "C" });
+  assert.equal(confirmed.status, 200);
+  assert.deepEqual(confirmed.body.questions[0].missingComponents, []);
+});
+
 test("POST /documents rejects unsupported file types", async () => {
   const originCount = JSON.parse(await readFile(registryPath, "utf8")).length as number;
   const response = await request(app)

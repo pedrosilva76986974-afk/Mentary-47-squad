@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { hasAlternativeLabelGaps } from "../src/services/question-alternatives.service.js";
 import { test } from "node:test";
 import { structureQuestion } from "../src/services/question-structure.service.js";
 import { parseQuestions } from "../src/services/question-parser.service.js";
@@ -18,6 +19,16 @@ const questionBase: ParsedQuestion = {
   pageEnd: 1,
   confidence: "medium",
 };
+
+test("OCR gaps are flagged without inventing a missing alternative or rejecting reordered labels", () => {
+  const alternatives = [{ label: "A", text: "3" }, { label: "C", text: "5" }];
+  const result = structureQuestion({ ...questionBase, alternatives, text: "Quanto e 2 + 2? A) 3 C) 5", prompt: "Quanto e 2 + 2?" });
+  assert.ok(result.missingComponents?.includes("alternatives"));
+  assert.deepEqual(result.alternatives?.map(item => item.label), ["A", "C"]);
+  assert.equal(hasAlternativeLabelGaps([{ label: "C" }, { label: "A" }, { label: "B" }]), false);
+  assert.equal(hasAlternativeLabelGaps([{ label: "1" }, { label: "3" }]), true);
+  assert.equal(hasAlternativeLabelGaps([{ label: "V" }, { label: "F" }]), false);
+});
 
 test("question structuring classifies a multiple-choice question and flags its missing answer", () => {
   const result = structureQuestion(questionBase);
@@ -67,4 +78,3 @@ test("repairs OCR option labels that look like question numbers without inventin
   assert.equal(questions[2]?.responseType, "multiple_choice");
   assert.match(questions[2]?.prompt ?? "", /a que gênero textual ele pertence/);
 });
-

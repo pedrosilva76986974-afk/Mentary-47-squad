@@ -70,6 +70,8 @@ Cancelamento é cooperativo: há verificações entre etapas e páginas, interru
 
 Um candidato numerado com alternativas danificadas pode continuar pendente. Isso evita descarte silencioso, mas não prova que todo candidato é uma questão válida. `confidence` é uma classificação interna do parser, não uma estimativa pedagógica de acerto da IA.
 
+Lacunas em sequências convencionais como A/C ou 1/3 geram aviso de alternativas a conferir, sem inventar o item ausente. A ordem C/A/B não é uma lacuna. Rótulos deliberados continuam sujeitos à confirmação humana, sem impor numeração sequencial como regra de aprovação.
+
 ## 4. Elementos visuais
 
 `visual-detection.service.ts` inspeciona operadores de imagem/desenho por página. Se essa inspeção falhar, retorna uma referência não confirmada e `extractionWarning`; texto legível continua disponível. O tipo `graphic` nesse fallback é um marcador de revisão da página, não comprovação de um gráfico reconhecido.
@@ -204,6 +206,8 @@ Os erros tratados usam `{"error":"mensagem"}`. Ainda não há taxonomia de códi
 | `utils/question-presentation.ts` | Textos de apresentação da questão objetiva. |
 
 Rascunhos sobrevivem à navegação interna na mesma aba; não sobrevivem necessariamente à recarga/fechamento. Recuperação durável está em #41. `App.tsx` ainda concentra estados e efeitos: futuras extrações devem preservar cancelamento e a regra de não apagar edições feitas durante um salvamento.
+
+O Workspace mantém o endereço da revisão ativa, permitindo reabrir a versão salva após recarga. O campo BNCC mantém separadores durante a digitação e transforma o texto em lista; não eliminar a vírgula ao normalizar um campo controlado a cada tecla.
 
 ## 11. Configuração
 

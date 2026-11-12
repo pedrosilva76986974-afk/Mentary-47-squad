@@ -257,3 +257,13 @@ Configurações administrativas: proteção da main não pôde ser consultada (H
 - Validação local final: lint/build dos dois projetos aprovados; 133 testes, 131 aprovados, zero falhas e duas integrações opcionais desativadas na suíte geral. PostgreSQL e OCR reais são conferidos no novo commit do PR #35.
 
 Sem teste de carga, pesquisa com professores ou validação de múltiplas instâncias nesta rodada. Nenhum dado real, credencial ou estado de issue foi removido para simular conclusão.
+
+## 12/11/2026 — Teste de uso no navegador
+
+Ensaio com PDF/imagem/TXT fictícios, sem participantes humanos, detalhado em RELATORIO-TESTE-USO-2026-11-12.md. Verificados envio, classificação/cancelamento, edição, validação de aprovação, fonte visual, páginas desconhecidas, publicação/retirada, filtros, exportação, navegação, teclado e largura móvel de 390 px.
+
+Corrigidos cinco problemas observados: digitação de várias habilidades BNCC consumia a vírgula; endereço da revisão não era preservado ao voltar do banco; título da aba não acompanhava a tela; feedback da questão anterior permanecia; lacuna A/C causada por OCR não gerava aviso específico de alternativas.
+
+JSON exportado conferido com duas habilidades separadas e gabarito correto. Publicação fictícia retirada ao final; nenhuma revisão real foi alterada. Cancelamento de envio durante OCR confirmado pela interface. Capturas locais em tmp/ux-20261112.
+
+Lint/build frontend e backend aprovados. Suíte geral: 137 testes, 135 aprovados, zero falhas, duas integrações opcionais separadas. O CI do commit final valida também PostgreSQL e OCR reais. Omissão de texto pelo OCR continua possível; a nova heurística sinaliza a lacuna sem inventar conteúdo.

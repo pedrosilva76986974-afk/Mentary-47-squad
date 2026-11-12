@@ -1,4 +1,5 @@
 import { regionMatchesQuestion } from "./question-regions.service.js";
+import { hasAlternativeLabelGaps } from "./question-alternatives.service.js";
 import { withDocumentLock } from "./document-lock.service.js";
 import { validateRegion } from "./source-preview.service.js";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
@@ -76,7 +77,8 @@ function normalizeReviewResult(review: ReviewResult): ReviewResult {
     const missingComponents = new Set(question.missingComponents ?? []);
     if (question.prompt?.trim()) missingComponents.delete("prompt");
     else missingComponents.add("prompt");
-    if ((question.alternatives?.length ?? 0) >= 2 && question.alternatives!.every(a=>a.label.trim()&&a.text.trim()) && new Set(question.alternatives!.map(a=>a.label.trim().toUpperCase())).size===question.alternatives!.length) missingComponents.delete("alternatives");
+    if ((question.alternatives?.length ?? 0) >= 2 && question.alternatives!.every(a=>a.label.trim()&&a.text.trim()) && new Set(question.alternatives!.map(a=>a.label.trim().toUpperCase())).size===question.alternatives!.length
+      && (question.status === "approved" || !hasAlternativeLabelGaps(question.alternatives!))) missingComponents.delete("alternatives");
     else missingComponents.add("alternatives");
     const answerKey = question.answerKey?.trim().toLocaleUpperCase("pt-BR");
     if (answerKey && question.alternatives?.some((alternative) => alternative.label.trim().toLocaleUpperCase("pt-BR") === answerKey)) {

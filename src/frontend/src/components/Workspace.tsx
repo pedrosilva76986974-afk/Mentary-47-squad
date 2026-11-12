@@ -5,6 +5,13 @@ import { QuestionBank } from "../pages/QuestionBank.js";
 /** Keep the upload/review mounted while navigating so files, requests and edits survive. */
 export function Workspace() {
   const [bank, setBank] = useState(() => new URLSearchParams(window.location.search).has("bank"));
+  const [reviewId, setReviewId] = useState<string | undefined>(() =>
+    new URLSearchParams(window.location.search).get("review") ?? undefined,
+  );
+  useEffect(() => {
+    if (bank) document.title = "Banco de questões | Mentary";
+    else window.history.replaceState(null, "", reviewId ? `/?review=${encodeURIComponent(reviewId)}` : "/");
+  }, [bank, reviewId]);
   useEffect(() => {
     const update = () => {
       const next = new URLSearchParams(window.location.search).has("bank");
@@ -20,13 +27,14 @@ export function Workspace() {
     const href = anchor.getAttribute("href");
     if (href !== "/" && href !== "/?bank=1") return;
     event.preventDefault();
-    window.history.pushState(null, "", href);
+    const destination = href === "/" && reviewId ? `/?review=${encodeURIComponent(reviewId)}` : href;
+    window.history.pushState(null, "", destination);
     const next = href === "/?bank=1";
     setBank(next);
     window.scrollTo(0, 0);
   }
   return <div onClick={navigate}>
-    <div hidden={bank}><App /></div>
+    <div hidden={bank}><App active={!bank} onReviewChange={setReviewId} /></div>
     {bank && <QuestionBank />}
   </div>;
 }

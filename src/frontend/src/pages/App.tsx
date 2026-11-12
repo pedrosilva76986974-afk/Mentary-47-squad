@@ -68,14 +68,21 @@ function identifierLabel(method: NonNullable<UploadResult["identification"]>["me
   return "Identificador local por regras (Ollama não foi usado)";
 }
 
-function App() {
+function App({ active = true, onReviewChange }: { active?: boolean; onReviewChange?: (id: string | undefined) => void }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadCancellation = useRef<AbortController | null>(null);
   useEffect(() => () => uploadCancellation.current?.abort(), []);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
+  useEffect(() => {
+    if (result?.origin.id) onReviewChange?.(result.origin.id);
+  }, [result?.origin.id, onReviewChange]);
+  useEffect(() => {
+    if (active) document.title = result ? "Revisar questões | Mentary" : "Envio de documento | Mentary";
+  }, [active, result?.origin.id]);
   const [selectedQuestion, setSelectedQuestion] = useState(0);
+  useEffect(() => setFeedback(null), [selectedQuestion]);
   useEffect(() => setSelectedQuestion(0), [result?.origin.id]);
   const [showUpload, setShowUpload] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -189,6 +196,7 @@ function App() {
   }, []);
 
   async function chooseFile(file: File | undefined): Promise<void> {
+    onReviewChange?.(undefined);
     setFeedback(null);
     setResult(null);
     if (!file) {
@@ -578,7 +586,7 @@ function App() {
                           {question.missingComponents?.some((component) => component !== "prompt") && (
                             <p className="question-answer-empty">
                               {question.missingComponents.includes("alternatives") &&
-                                "Alternativas não identificadas. "}
+                                "Alternativas incompletas ou com sequência a conferir. "}
                               {question.missingComponents.includes("answer") &&
                                 "Gabarito não identificado no documento."}
                             </p>
