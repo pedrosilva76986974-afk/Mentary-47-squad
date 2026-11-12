@@ -367,4 +367,3 @@ footer span { color: var(--electric-blue); font-size: 11px; font-weight: 900; }
 .question-source img { max-width:100%; height:auto; }
 @media(max-width:700px) { .bank-panel { padding:18px; margin-top:20px; } .bank-filters { grid-template-columns:1fr; } .source-crop-fields { grid-template-columns:1fr; } .bank-question { padding:14px; } .topbar { flex-wrap:wrap; gap:16px; } }
 .bank-visual { max-width:100%; height:auto; border:1px solid #eee8f5; border-radius:8px; }
-

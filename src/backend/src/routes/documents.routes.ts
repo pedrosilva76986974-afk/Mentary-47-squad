@@ -80,4 +80,3 @@ router.post("/:documentId/classification/cancel", async (req, res) => {
 router.patch("/:documentId/review/questions/:questionId", updateDocumentReviewQuestion);
 
 export { router as documentsRouter };
-

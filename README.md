@@ -223,4 +223,3 @@ O workflow .github/workflows/ci.yml executa lint, builds, testes gerais, Postgre
 - [Catálogo de bugs](docs/CATALOGO-DE-BUGS.md)
 - [Testes de tela](docs/TESTES-DE-TELA.md)
 - [Auditoria das issues e backlog de avaliações](docs/AUDITORIA-ISSUES.md)
-

@@ -700,4 +700,3 @@ test("question parser recognizes an implementation task and keeps numbered obser
   assert.match(questions[0]?.text ?? "", /public void adiciona/);
   assert.match(questions[0]?.text ?? "", /Observações/);
 });
-

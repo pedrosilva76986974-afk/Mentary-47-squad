@@ -284,4 +284,3 @@ Deve apresentar distribuição das alternativas.
 Deve apresentar o tempo médio de resposta.
 Deve identificar comportamentos que mereçam atenção.
 Deve gerar alertas quando regras configuradas forem atendidas.
-

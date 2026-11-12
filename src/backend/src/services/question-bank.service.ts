@@ -232,4 +232,3 @@ export async function selectBankQuestions(ids: unknown) {
     );
   return response.rows;
 }
-

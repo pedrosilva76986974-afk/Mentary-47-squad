@@ -31,4 +31,3 @@ test("source crop validation rejects unknown pages, non-finite coordinates and o
   }
   assert.equal(applySourceCrop(original, 1, 2, crop).visualReferences?.[0]?.page, 1);
 });
-

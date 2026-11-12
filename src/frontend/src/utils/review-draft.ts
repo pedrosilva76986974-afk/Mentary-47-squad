@@ -25,4 +25,3 @@ export function clearSavedDraft(
   delete remaining[questionId];
   return remaining;
 }
-

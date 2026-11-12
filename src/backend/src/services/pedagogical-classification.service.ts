@@ -252,4 +252,3 @@ export async function cancelClassification(id: string): Promise<ClassificationJo
   }
   return structuredClone(current);
 }
-

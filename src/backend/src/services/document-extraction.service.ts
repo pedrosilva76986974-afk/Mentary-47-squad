@@ -280,4 +280,3 @@ async function extractDocument(
 
 export { extractDocument, groupPageText };
 export type { ExtractionResult, VisualPageReference };
-

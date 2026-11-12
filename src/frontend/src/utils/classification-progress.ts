@@ -16,4 +16,3 @@ export function classificationProgress(job: PedagogicalJob | null, total: number
       return { label: "Em andamento", message: `Classificação em andamento (${count} de ${total}); você já pode revisar as questões.` };
   }
 }
-

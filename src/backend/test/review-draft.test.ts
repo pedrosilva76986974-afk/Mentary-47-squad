@@ -60,4 +60,3 @@ test("review drafts preserve saved content, answer keys, pedagogy and visual sou
   });
   assert.equal(saved.status, "pending_review");
 });
-

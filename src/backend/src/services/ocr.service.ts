@@ -96,4 +96,3 @@ async function recognizeImageWithLayout(image: Buffer, signal?: AbortSignal): Pr
 
 async function closeOcrWorker(): Promise<void> { const current = workerPromise; workerPromise = undefined; if(current) await (await current).terminate(); }
 export { closeOcrWorker, orderOcrBlocks, prepareImageForOcr, recognizeImageWithLayout };
-

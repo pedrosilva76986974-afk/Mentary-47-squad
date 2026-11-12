@@ -244,4 +244,3 @@ Correções implementadas:
 Validação local: lint e builds dos dois projetos passaram. Suíte geral: 125 testes, 123 passaram, zero falhas e duas integrações opcionais desativadas. PostgreSQL real e OCR real são conferidos separadamente na execução remota da entrega. Não houve nova homologação com participantes humanos nem medição nova do desempenho pedagógico do modelo.
 
 Configurações administrativas: proteção da main não pôde ser consultada (HTTP 403); Projects não pôde ser administrado com as ferramentas da integração. Esses pontos não foram marcados como concluídos pela auditoria. Nenhum estado de issue foi alterado para encerrar trabalho ainda não integrado.
-

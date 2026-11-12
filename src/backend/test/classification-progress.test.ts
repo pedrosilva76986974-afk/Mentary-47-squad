@@ -18,4 +18,3 @@ test("cancelled and failed classifications explicitly distinguish partial result
   assert.doesNotMatch(completed.message, /parciais/);
   assert.equal(classificationProgress({ status: "queued", suggestions: [] }, 3).label, "Na fila");
 });
-

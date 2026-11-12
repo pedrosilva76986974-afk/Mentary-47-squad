@@ -11,4 +11,3 @@ router.get("/:questionId", async (req, res) => {
   res.json((await selectBankQuestions([String(req.params.questionId)]))[0]);
 });
 export { router as questionBankRouter };
-

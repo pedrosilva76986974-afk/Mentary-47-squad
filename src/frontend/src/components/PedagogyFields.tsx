@@ -70,4 +70,3 @@ export function PedagogyFields({ pedagogy, onChange }: Props) {
     </>
   );
 }
-

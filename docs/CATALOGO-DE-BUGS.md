@@ -42,4 +42,3 @@ No backend: npm test; npm run test:postgres; npm run test:ocr. A integração Po
 - O banco deduplica representação textual normalizada, não paráfrases nem equivalência matemática geral.
 - Classificação pedagógica continua sujeita à revisão docente; a meta de 15 segundos não é SLA universal.
 - Homologação com professores reais permanece uma etapa humana; não foi simulada como se tivesse ocorrido.
-

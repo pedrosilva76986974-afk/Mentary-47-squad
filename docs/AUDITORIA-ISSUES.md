@@ -61,4 +61,3 @@ Estas histórias estão cadastradas, mas **não implementadas**. Não são pend�
 ## Critério de encerramento deste trabalho
 
 Encerrar quando cada issue existente estiver ligada à implementação/evidência ou a uma limitação explícita; as lacunas corrigíveis do extrator passarem nas verificações; e US13–US20 estiverem cadastradas com critérios e dependências. Novas ideias não reiniciam indefinidamente o ciclo.
-

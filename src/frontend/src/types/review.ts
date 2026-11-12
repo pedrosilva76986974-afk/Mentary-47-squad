@@ -94,4 +94,3 @@ export type PedagogicalJob = {
     targetMet?: boolean;
   }>;
 };
-

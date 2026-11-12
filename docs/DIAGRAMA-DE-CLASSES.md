@@ -112,4 +112,3 @@ sequenceDiagram
   API->>PostgreSQL: Consultar somente origens ativas aprovadas
   API-->>UI: Resultados paginados
 ```
-

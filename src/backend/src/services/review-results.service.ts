@@ -327,4 +327,3 @@ async function removeReviewResult(documentId: string): Promise<void> {
 
 export { findQuestionVisualReferences, getReviewResult, migrateLegacyReviewFiles, removeReviewResult, saveReviewResult, updateReviewQuestion };
 export type { ReviewQuestion, ReviewQuestionUpdate, ReviewResult };
-

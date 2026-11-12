@@ -16,4 +16,3 @@ test("visual recovery never swallows a user cancellation", async () => {
   const broken = { getOperatorList: async () => { controller.abort(); throw new Error("Cancelled"); } };
   await assert.rejects(detectVisualReference(broken, 1, controller.signal), { name: "AbortError" });
 });
-
