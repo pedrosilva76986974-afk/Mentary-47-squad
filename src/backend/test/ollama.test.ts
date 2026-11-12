@@ -152,6 +152,10 @@ test("post-extraction pedagogical classification lifecycle", async t => {
       globalThis.fetch = async () => new Response(JSON.stringify({ message: { content: '{"q":[' } }));
       await assert.rejects(classifyPedagogy(parsed.questions), /Classificação incompleta/);
     });
+    await t.test("unreachable Ollama reports an actionable message instead of raw fetch failure", async () => {
+      globalThis.fetch = async () => { throw new TypeError("fetch failed"); };
+      await assert.rejects(classifyPedagogy(parsed.questions), /Não foi possível conectar ao Ollama.*Classificar novamente/);
+    });
     await t.test("cancel aborts pending Ollama request and supports retry", async () => {
       let aborted = false;
       let entered!: () => void;

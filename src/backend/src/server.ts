@@ -3,6 +3,7 @@ import { app } from "./app.js";
 import { cleanupExpiredDocuments } from "./services/document-retention.service.js";
 import { initializeDatabase } from "./services/database.service.js";
 import { migrateLegacyReviewFiles } from "./services/review-results.service.js";
+import { runDurableClassificationWorker } from "./services/durable-classification.service.js";
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -20,6 +21,10 @@ async function startServer(): Promise<void> {
   const migratedReviews = await migrateLegacyReviewFiles();
   if (migratedReviews > 0) console.log(`${migratedReviews} revisão(ões) antiga(s) migrada(s) para o PostgreSQL.`);
   await publishExistingApprovedQuestions();
+  const runWorker = () => { void runDurableClassificationWorker().catch(error => console.error("Falha no processamento da fila pedagógica.", error)); };
+  runWorker();
+  const workerTimer = setInterval(runWorker, 2000);
+  workerTimer.unref();
   await runRetentionCleanup();
   const cleanupTimer = setInterval(() => void runRetentionCleanup(), 24 * 60 * 60 * 1000);
   cleanupTimer.unref();

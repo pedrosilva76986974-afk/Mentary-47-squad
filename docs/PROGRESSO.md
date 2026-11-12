@@ -1,3 +1,7 @@
+# Histórico de implementação
+
+O estado consolidado das issues está em [AUDITORIA-ISSUES.md](AUDITORIA-ISSUES.md). Os registros abaixo são históricos; pendências antigas podem ter sido substituídas pelas entregas posteriores.
+
 ## Banco próprio e seis frentes — 07/11/2026
 
 A dependência do banco externo Mentary foi retirada do fluxo de publicação. As migrations 005–007 criam banco.questions e banco.question_sources no PostgreSQL local, mantendo extrator para revisão e o legado intacto. Aprovar publica na mesma transação; pendentes/rejeitadas não aparecem na consulta. Reabrir retira aquela origem ativa. Duplicatas exatas normalizadas compartilham a questão e preservam todas as origens. Equivalência semântica, paráfrases e alternativas reordenadas ainda exigem conferência humana. O bloqueio histórico da #17 descrito abaixo foi substituído por esta implementação autorizada de banco próprio.
@@ -222,3 +226,58 @@ Os links Enviar material e Banco de questões agora usam navegação interna. O 
 Validado em navegador com mentary-navegacao-simulado.pdf: selecionar arquivo, ir ao banco e retornar; enviar e sair durante a requisição; voltar à revisão com questão, alternativas e gabarito; editar responsável sem salvar, navegar ao banco e voltar pelo histórico, preservando rascunho e aviso de alterações. A classificação concluiu e preencheu os campos durante o ensaio. Lint e build frontend passaram. Não houve edição de documentos do usuário nem participantes humanos.
 
 Escopo: preservação durante a navegação interna na mesma aba. Recarregar a página, fechar a aba ou abrir links diretos continua iniciando outra instância; rascunhos não salvos não são persistidos em banco por esta alteração.
+
+## 11/11/2026 — Auditoria das issues e fechamento das lacunas do extrator
+
+Comparadas as 22 issues existentes com código, testes e histórias. US13–US20 não tinham issues: cadastradas como #27–#34, com critérios, prioridades e dependências. Por decisão do responsável, avaliações e dashboards permanecem no backlog; não foram implementados neste ciclo. Numeração documental padronizada em US.
+
+Correções implementadas:
+
+- A troca da página do recorte substitui a referência principal e mantém referências secundárias; coordenadas não finitas são rejeitadas antes do envio.
+- Falha de inspeção visual em PDF gera aviso persistido por página e preserva texto legível. O cancelamento continua sendo propagado. Salvar outros campos não converte uma associação incerta em manual nem remove seu aviso; confirmar o recorte resolve o aviso.
+- A mesma normalização de componentes incompletos é usada ao salvar e consultar uma revisão.
+- Salvamento mantém edições feitas durante a requisição; somente o rascunho efetivamente salvo é limpo.
+- Mudança da seleção limpa sua prévia; consulta/exportação não concorrem na tela, e sair do banco cancela a requisição pendente.
+- Classificação cancelada ou falha mostra explicitamente a quantidade de resultados parciais preservados.
+- Incluída a limpeza e separação de responsabilidades iniciada no ciclo anterior: tipos de revisão, campos pedagógicos, rascunhos, nomes da fila e remoção de código sem chamadas/arquivos vazios.
+
+Validação local: lint e builds dos dois projetos passaram. Suíte geral: 125 testes, 123 passaram, zero falhas e duas integrações opcionais desativadas. PostgreSQL real e OCR real são conferidos separadamente na execução remota da entrega. Não houve nova homologação com participantes humanos nem medição nova do desempenho pedagógico do modelo.
+
+Configurações administrativas: proteção da main não pôde ser consultada (HTTP 403); Projects não pôde ser administrado com as ferramentas da integração. Esses pontos não foram marcados como concluídos pela auditoria. Nenhum estado de issue foi alterado para encerrar trabalho ainda não integrado.
+
+## 12/11/2026 — Guia do código e revisão aprofundada
+
+- Publicados GUIA-DO-CODIGO.md e REVISAO-CODIGO.md, com mapa de serviços/componentes, fluxos, API, erros, dados, configuração, testes, manutenção e limites.
+- Issues #36–#43 registram documentação, retenção, concorrência parcial, erros/limites de renderização, autenticação, recuperação de rascunhos, fila distribuída e homologação humana. Avaliações/dashboards continuam no backlog #27–#34; não foram implementados.
+- Revisões concorrentes do mesmo documento são serializadas na instância atual. Leituras PostgreSQL usam snapshot consistente; garantia entre servidores/controle de versão continuam pendentes em #38.
+- Retenção agora inclui classificações; não remove documentos com análise ativa. Início/consulta e exclusão são coordenados, sem bloquear documentos independentes.
+- JSON inválido e excessivo retornam 400/413. OCR e prévia de PDF validam limites de canvas antes da alocação nativa.
+- Removidos contador permanentemente oculto, dados sem consumo no frontend, cinco exportações de tipos internas e configuração de teste sem efeito. Compatibilidades de dados antigos foram mantidas.
+- Novo npm run audit:source inventaria 49 arquivos de produção e 32 arquivos de teste; sem candidatos remanescentes a arquivos/exports/CSS sem referência. Análise auxiliar, não prova de ausência de todo código morto.
+- Validação local final: lint/build dos dois projetos aprovados; 133 testes, 131 aprovados, zero falhas e duas integrações opcionais desativadas na suíte geral. PostgreSQL e OCR reais são conferidos no novo commit do PR #35.
+
+Sem teste de carga, pesquisa com professores ou validação de múltiplas instâncias nesta rodada. Nenhum dado real, credencial ou estado de issue foi removido para simular conclusão.
+
+## 12/11/2026 — Teste de uso no navegador
+
+Ensaio com PDF/imagem/TXT fictícios, sem participantes humanos, detalhado em RELATORIO-TESTE-USO-2026-11-12.md. Verificados envio, classificação/cancelamento, edição, validação de aprovação, fonte visual, páginas desconhecidas, publicação/retirada, filtros, exportação, navegação, teclado e largura móvel de 390 px.
+
+Corrigidos seis problemas observados: digitação de várias habilidades BNCC consumia a vírgula; endereço da revisão não era preservado ao voltar do banco; título da aba não acompanhava a tela; feedback da questão anterior permanecia; lacuna A/C causada por OCR não gerava aviso específico de alternativas; cancelamento no navegador não fechava a conexão da API através do proxy Vite.
+
+JSON exportado conferido com duas habilidades separadas e gabarito correto. Publicação fictícia retirada ao final; nenhuma revisão real foi alterada. Cancelamento de envio durante OCR confirmado pela interface; inspeção posterior revelou processamento residual na API. Após corrigir o proxy, requisição real abortada deixou zero novos registros. Teste de regressão falhou com a configuração anterior e passou com a corrigida. Capturas locais em tmp/ux-20261112.
+
+Lint/build frontend e backend aprovados. Suíte geral: 138 testes, 136 aprovados, zero falhas, duas integrações opcionais separadas. O CI do commit final valida também PostgreSQL e OCR reais. Omissão de texto pelo OCR continua possível; a nova heurística sinaliza a lacuna sem inventar conteúdo.
+
+## 12/11/2026 — Recuperação, concorrência e início de avaliações
+
+Login/autorização retirados do escopo deste módulo por decisão do responsável: serão fornecidos pelo sistema principal. CI do PR #26 integrado à branch de trabalho no GitHub. Seletor PC/Celular incluído na entrega.
+
+Rascunhos locais optativos por até sete dias, recuperação/descarte/download e bloqueio de restauração sobre versão modificada. Questões recebem hash de revisão; o frontend envia a versão esperada e recebe 409 em conflito. Revisões PostgreSQL usam a mesma transação e trava por documento entre processos. Clientes legados devem passar a enviar expectedRevision.
+
+Fila PostgreSQL persiste entrada, parciais, cursor, posse, lease e tentativas; worker na inicialização e a cada dois segundos. Testes em processos independentes comprovaram exclusão mútua, queda, retomada sem repetir parcial confirmado e cancelamento entre servidores. Modo por arquivos continua local, com retentativa manual. Armazenamento compartilhado dos originais ainda depende da integração/infraestrutura.
+
+Primeira entrega de avaliações: importação JSON e API, snapshots e resultados persistidos, idempotência, correção com omissões, métricas por estudante/questão/BNCC/descritor, filtros de escola/turma/período e comparação de duas aplicações. Metas/alertas e análise longitudinal ficam para a continuação. Contrato e exemplo fictício em AVALIACOES-E-INTEGRACAO.md e EXEMPLO-AVALIACAO.json.
+
+Validação local: 143 testes gerais, 141 aprovados, zero falhas, duas integrações opcionais separadas. PostgreSQL: quatro testes aprovados, incluindo três cenários adicionais. Lint/build dos dois projetos aprovados. Inventário: 55 arquivos de produção, 36 arquivos de teste/apoio, sem candidatos sem referência.
+
+Ensaio de navegador em banco temporário isolado: recuperação após recarga, salvamento/limpeza do rascunho, dashboard com 2 acertos/1 erro/3 omissões (33,33%), comparação, largura de 390 px sem transbordamento da página e reimportação idempotente pelo seletor de arquivos. Console sem erros capturados. Não houve teste com professores: protocolo preparado em PROTOCOLO-HOMOLOGACAO.md, execução humana pendente em #43.

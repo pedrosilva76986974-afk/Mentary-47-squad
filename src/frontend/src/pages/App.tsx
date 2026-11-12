@@ -1,3 +1,7 @@
+import { classificationProgress } from "../utils/classification-progress.js";
+import type { Question, ReviewUpdate, UploadResult, Feedback, PedagogicalJob } from "../types/review.js";
+import { clearSavedDraft, createQuestionDraft, draftStorageKey, serializeReviewDraft, parseReviewDraft, recoverableDrafts, type SavedReviewDraft } from "../utils/review-draft.js";
+import { PedagogyFields } from "../components/PedagogyFields.js";
 import { SiteHeader } from "../components/SiteHeader.js";
 import { VisualSourceEditor } from "../components/VisualSourceEditor.js";
 import { fillEmptyPedagogy } from "../utils/pedagogy-filling.js";
@@ -8,65 +12,17 @@ import { readApiResponse } from "../utils/api-response.js";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const supportedFormats = {
-  ".pdf": { mime: "application/pdf", signature: [0x25, 0x50, 0x44, 0x46, 0x2d] },
-  ".png": { mime: "image/png", signature: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
+  ".pdf": {
+    mime: "application/pdf",
+    signature: [0x25, 0x50, 0x44, 0x46, 0x2d],
+  },
+  ".png": {
+    mime: "image/png",
+    signature: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  },
   ".jpg": { mime: "image/jpeg", signature: [0xff, 0xd8, 0xff] },
   ".jpeg": { mime: "image/jpeg", signature: [0xff, 0xd8, 0xff] },
 } as const;
-
-type Question = {
-  id: string;
-  number: number | null;
-  text: string;
-  prompt?: string;
-  answerKey?: string | null;
-  responseType?: "multiple_choice";
-  alternatives?: Array<{ label: string; text: string }>;
-  pedagogy?: {
-    discipline?: string;
-    area?: string;
-    questionType?: string;
-    grade?: string;
-    topic?: string;
-    bnccSkills?: string[];
-    descriptor?: string;
-    difficulty?: "easy" | "medium" | "hard" | "unknown";
-  };
-  missingComponents?: Array<"prompt" | "alternatives" | "answer">;
-  pageStart: number | null;
-  pageEnd: number | null;
-  status: "pending_review" | "approved" | "rejected";
-  reviewedBy?: string | null;
-  visualReferences?: Array<{ page: number; kind: "image" | "graphic"; region?: {x:number;y:number;width:number;height:number}; association?: "automatic"|"manual"|"unconfirmed" }>;
-};
-
-type ReviewUpdate = { pageStart: number | null; pageEnd: number | null; visualReferences?: Question["visualReferences"]; prompt: string; alternatives: Array<{ label: string; text: string }>; answerKey: string | null; pedagogy: NonNullable<Question["pedagogy"]>; reviewedBy: string; status?: Question["status"] };
-
-type UploadResult = {
-  publishedQuestionIds?: string[];
-  status: "pending_review" | "no_questions";
-  message: string;
-  origin: { fileName: string; id?: string; mimeType?: string };
-  pages: number;
-  method: "pdf-text" | "ocr" | "hybrid";
-  text: string;
-  questionCount: number;
-  questions: Question[];
-  reviewUrl: string;
-  sourceUrl?: string;
-  identification?: {
-    method: "ollama" | "ollama+rules" | "rules";
-    model?: string;
-    reason?: string;
-    durationMs: number;
-    localParserMs: number;
-    extractionDurationMs?: number;
-    ollama?: { durationMs: number; loadDurationMs?: number; promptTokens?: number; outputTokens?: number };
-  };
-};
-
-type Feedback = { message: string; kind: "success" | "warning" | "error" };
-type PedagogicalJob = { version?: number; sourceHash?: string; status: "queued" | "running" | "completed" | "failed" | "cancelled"; stale?: boolean; error?: string; suggestions: Array<{ questionId: string; area: string; discipline: string; questionType: string; grade: string; topic: string; descriptor: string; difficulty: "easy" | "medium" | "hard" | "unknown"; processingMs?: number; targetMs?: number; targetMet?: boolean }> };
 
 /** Checks the file's extension, browser MIME type, size, and real file signature before upload. */
 async function validateFile(file: File): Promise<void> {
@@ -78,9 +34,10 @@ async function validateFile(file: File): Promise<void> {
   if (file.size > MAX_FILE_SIZE) throw new Error("O arquivo excede o limite de 20 MB.");
 
   const bytes = new Uint8Array(await file.slice(0, extension === ".pdf" ? 1024 : 8).arrayBuffer());
-  const hasSignature = extension === ".pdf"
-    ? bytes.some((_, index) => format.signature.every((byte, offset) => bytes[index + offset] === byte))
-    : format.signature.every((byte, index) => bytes[index] === byte);
+  const hasSignature =
+    extension === ".pdf"
+      ? bytes.some((_, index) => format.signature.every((byte, offset) => bytes[index + offset] === byte))
+      : format.signature.every((byte, index) => bytes[index] === byte);
   if (!hasSignature) throw new Error("O conteúdo do arquivo não corresponde à extensão informada.");
 }
 
@@ -104,42 +61,93 @@ function durationLabel(durationMs: number): string {
 }
 
 function identifierLabel(method: NonNullable<UploadResult["identification"]>["method"]): string {
-  if (method === "ollama") return "Ollama classificou o tipo; texto e separação vieram do processamento local";
-  if (method === "ollama+rules") return "Ollama classificou parte das questões; regras locais mantiveram as demais";
+  if (method === "ollama")
+    return "Ollama classificou o tipo; texto e separação vieram do processamento local";
+  if (method === "ollama+rules")
+    return "Ollama classificou parte das questões; regras locais mantiveram as demais";
   return "Identificador local por regras (Ollama não foi usado)";
 }
 
-function App() {
+function App({ active = true, onReviewChange }: { active?: boolean; onReviewChange?: (id: string | undefined) => void }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadCancellation = useRef<AbortController | null>(null);
   useEffect(() => () => uploadCancellation.current?.abort(), []);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
+  useEffect(() => {
+    if (result?.origin.id) onReviewChange?.(result.origin.id);
+  }, [result?.origin.id, onReviewChange]);
+  useEffect(() => {
+    if (active) document.title = result ? "Revisar questões | Mentary" : "Envio de documento | Mentary";
+  }, [active, result?.origin.id]);
   const [selectedQuestion, setSelectedQuestion] = useState(0);
+  useEffect(() => setFeedback(null), [selectedQuestion]);
   useEffect(() => setSelectedQuestion(0), [result?.origin.id]);
   const [showUpload, setShowUpload] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showProcessingHint, setShowProcessingHint] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [questionDrafts, setQuestionDrafts] = useState<Record<string, ReviewUpdate>>({});
+  const [keepDrafts, setKeepDrafts] = useState(false);
+  const [savedDraft, setSavedDraft] = useState<SavedReviewDraft | null>(null);
+  const [draftWarning, setDraftWarning] = useState("");
+  const draftDocument = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const id = result?.origin.id;
+    if (!id || draftDocument.current === id) return;
+    draftDocument.current = id;
+    setKeepDrafts(false);
+    setQuestionDrafts({});
+    try {
+      const saved = parseReviewDraft(localStorage.getItem(draftStorageKey(id)), id);
+      setSavedDraft(saved);
+      if (!saved) localStorage.removeItem(draftStorageKey(id));
+    } catch { setDraftWarning("O navegador não permitiu consultar rascunhos locais."); }
+  }, [result?.origin.id]);
+  useEffect(() => {
+    const id = result?.origin.id;
+    if (!id || !keepDrafts || savedDraft) return;
+    try {
+      const content = serializeReviewDraft(id, questionDrafts);
+      if (content.length > 1000000) throw new Error("Limite local excedido");
+      if (Object.keys(questionDrafts).length) localStorage.setItem(draftStorageKey(id), content);
+      else localStorage.removeItem(draftStorageKey(id));
+    } catch { setDraftWarning("Não foi possível guardar o rascunho neste navegador. Salve a revisão no servidor."); }
+  }, [questionDrafts, keepDrafts, savedDraft, result?.origin.id]);
   const [savingQuestion, setSavingQuestion] = useState<string | null>(null);
   const [classification, setClassification] = useState<PedagogicalJob | null>(null);
   const [analysisAttempt, setAnalysisAttempt] = useState(0);
   const appliedClassifications = useRef(new Set<string>());
   useEffect(() => {
     if (!result || !classification || classification.stale || classification.version !== 6) return;
-    const pending = classification.suggestions.filter(s => !appliedClassifications.current.has(`${result.origin.id}:${classification.sourceHash}:${s.questionId}`));
+    const pending = classification.suggestions.filter(
+      (s) =>
+        !appliedClassifications.current.has(
+          `${result.origin.id}:${classification.sourceHash}:${s.questionId}`,
+        ),
+    );
     if (!pending.length) return;
-    pending.forEach(s => appliedClassifications.current.add(`${result.origin.id}:${classification.sourceHash}:${s.questionId}`));
-    setQuestionDrafts(current => {
+    pending.forEach((s) =>
+      appliedClassifications.current.add(`${result.origin.id}:${classification.sourceHash}:${s.questionId}`),
+    );
+    setQuestionDrafts((current) => {
       const next = { ...current };
       for (const suggestion of pending) {
-        const question = result.questions.find(q => q.id === suggestion.questionId);
+        const question = result.questions.find((q) => q.id === suggestion.questionId);
         if (!question) continue;
-        const draft = current[question.id] ?? { pageStart:question.pageStart,pageEnd:question.pageEnd,visualReferences:question.visualReferences, prompt: question.prompt ?? question.text, alternatives: question.alternatives ?? [], answerKey: question.answerKey ?? null, pedagogy: question.pedagogy ?? {}, reviewedBy: question.reviewedBy ?? "" };
-        if (draft.prompt !== (question.prompt ?? question.text) || JSON.stringify(draft.alternatives) !== JSON.stringify(question.alternatives ?? []) || draft.pedagogy.grade !== question.pedagogy?.grade || draft.pedagogy.discipline !== question.pedagogy?.discipline) continue;
-        next[question.id] = { ...draft, pedagogy: fillEmptyPedagogy(draft.pedagogy, suggestion) };
+        const draft = current[question.id] ?? createQuestionDraft(question);
+        if (
+          draft.prompt !== (question.prompt ?? question.text) ||
+          JSON.stringify(draft.alternatives) !== JSON.stringify(question.alternatives ?? []) ||
+          draft.pedagogy.grade !== question.pedagogy?.grade ||
+          draft.pedagogy.discipline !== question.pedagogy?.discipline
+        )
+          continue;
+        next[question.id] = {
+          ...draft,
+          pedagogy: fillEmptyPedagogy(draft.pedagogy, suggestion),
+        };
       }
       return next;
     });
@@ -154,19 +162,36 @@ function App() {
     const url = `/documents/${encodeURIComponent(id)}/classification`;
     const poll = async (start = false): Promise<void> => {
       try {
-        const response = await fetch(url, { method: start ? "POST" : "GET", signal: controller.signal });
-        if (!start && response.status === 404) { await poll(true); return; }
+        const response = await fetch(url, {
+          method: start ? "POST" : "GET",
+          signal: controller.signal,
+        });
+        if (!start && response.status === 404) {
+          await poll(true);
+          return;
+        }
         const payload = await readApiResponse<PedagogicalJob>(response);
-        if (!start && ["completed", "failed"].includes(payload.status) && payload.version !== 6) { await poll(true); return; }
+        if (!start && ["completed", "failed"].includes(payload.status) && payload.version !== 6) {
+          await poll(true);
+          return;
+        }
         if (controller.signal.aborted) return;
         setClassification(payload);
         if (["queued", "running"].includes(payload.status)) timer = setTimeout(() => void poll(), 2000);
       } catch (e) {
-        if (!controller.signal.aborted) setClassification({ status: "failed", suggestions: [], error: errorMessage(e) });
+        if (!controller.signal.aborted)
+          setClassification({
+            status: "failed",
+            suggestions: [],
+            error: errorMessage(e),
+          });
       }
     };
     void poll(analysisAttempt > 0);
-    return () => { controller.abort(); clearTimeout(timer); };
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
   }, [result?.origin.id, analysisAttempt]);
 
   useEffect(() => {
@@ -175,20 +200,29 @@ function App() {
     let cancelled = false;
     void fetch(`/documents/${encodeURIComponent(reviewId)}/review`)
       .then(async (response) => {
-        const payload = await readApiResponse<UploadResult & { sourceText?: string; error?: string }>(response);
-        if (!response.ok) throw new Error(payload.error || "Não foi possível carregar a revisão.");
+        const payload = await readApiResponse<UploadResult & { sourceText?: string }>(response);
+
         if (!cancelled) {
-          setResult({ ...payload, questionCount: payload.questions.length, text: payload.sourceText ?? "", reviewUrl: `/documents/${encodeURIComponent(reviewId)}/review`, sourceUrl: `/documents/${encodeURIComponent(reviewId)}/source` });
+          setResult({
+            ...payload,
+            questionCount: payload.questions.length,
+            text: payload.sourceText ?? "",
+            reviewUrl: `/documents/${encodeURIComponent(reviewId)}/review`,
+
+          });
           setFeedback(null);
         }
       })
       .catch((error: unknown) => {
         if (!cancelled) setFeedback({ message: errorMessage(error), kind: "error" });
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function chooseFile(file: File | undefined): Promise<void> {
+    onReviewChange?.(undefined);
     setFeedback(null);
     setResult(null);
     if (!file) {
@@ -230,9 +264,12 @@ function App() {
     try {
       const body = new FormData();
       body.append("document", selectedFile);
-      const response = await fetch("/documents", { method: "POST", body, signal: cancellation.signal });
-      const payload = await readApiResponse<UploadResult & { error?: string }>(response);
-      if (!response.ok) throw new Error(payload.error || "Não foi possível enviar o documento.");
+      const response = await fetch("/documents", {
+        method: "POST",
+        body,
+        signal: cancellation.signal,
+      });
+      const payload = await readApiResponse<UploadResult>(response);
 
       cancellation.signal.throwIfAborted();
       setResult(payload);
@@ -243,7 +280,10 @@ function App() {
       setSelectedFile(null);
       if (fileInput.current) fileInput.current.value = "";
     } catch (error) {
-      setFeedback({ message: cancellation.signal.aborted ? "Envio e processamento cancelados." : errorMessage(error), kind: cancellation.signal.aborted ? "warning" : "error" });
+      setFeedback({
+        message: cancellation.signal.aborted ? "Envio e processamento cancelados." : errorMessage(error),
+        kind: cancellation.signal.aborted ? "warning" : "error",
+      });
     } finally {
       uploadCancellation.current = null;
       window.clearTimeout(processingHintTimer);
@@ -253,35 +293,65 @@ function App() {
   }
 
   function questionDraft(question: Question): ReviewUpdate {
-    return questionDrafts[question.id] ?? {
-      pageStart:question.pageStart, pageEnd:question.pageEnd, visualReferences:question.visualReferences,
-      prompt: question.prompt ?? question.text,
-      alternatives: question.alternatives ?? [],
-      answerKey: question.answerKey ?? null,
-      pedagogy: question.pedagogy ?? {},
-      reviewedBy: question.reviewedBy ?? "",
-    };
+    return questionDrafts[question.id] ?? createQuestionDraft(question);
   }
 
   async function saveQuestion(question: Question, status?: Question["status"]): Promise<void> {
     if (!result || savingQuestion) return;
+    const draft = questionDraft(question);
     setSavingQuestion(question.id);
     try {
       const response = await fetch(`${result.reviewUrl}/questions/${encodeURIComponent(question.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...questionDraft(question), ...(status ? { status } : {}) }),
+        body: JSON.stringify({
+          ...draft,
+          ...(status ? { status } : {}),
+        }),
       });
-      const payload = await readApiResponse<{ questions?: Question[]; publishedQuestionIds?: string[]; error?: string }>(response);
-      if (!response.ok) throw new Error(payload.error || "Não foi possível salvar a revisão.");
-      const draft = questionDraft(question);
-      const classified = classification?.suggestions.find(s => s.questionId === question.id);
-      if (draft.prompt !== (question.prompt ?? question.text) || JSON.stringify(draft.alternatives) !== JSON.stringify(question.alternatives ?? []) || (draft.pedagogy.grade !== question.pedagogy?.grade && draft.pedagogy.grade !== classified?.grade) || (draft.pedagogy.discipline !== question.pedagogy?.discipline && draft.pedagogy.discipline !== classified?.discipline)) {
-        setClassification(current => current ? { ...current, stale: true } : current);
+      const payload = await readApiResponse<{
+        questions?: Question[];
+        publishedQuestionIds?: string[];
+      }>(response);
+
+      const classified = classification?.suggestions.find((s) => s.questionId === question.id);
+      if (
+        draft.prompt !== (question.prompt ?? question.text) ||
+        JSON.stringify(draft.alternatives) !== JSON.stringify(question.alternatives ?? []) ||
+        (draft.pedagogy.grade !== question.pedagogy?.grade && draft.pedagogy.grade !== classified?.grade) ||
+        (draft.pedagogy.discipline !== question.pedagogy?.discipline &&
+          draft.pedagogy.discipline !== classified?.discipline)
+      ) {
+        setClassification((current) => (current ? { ...current, stale: true } : current));
       }
-      if (payload.questions) setResult((current) => current ? { ...current, questions: payload.questions!, publishedQuestionIds: payload.publishedQuestionIds } : current);
-      setQuestionDrafts((current) => { const next = { ...current }; delete next[question.id]; return next; });
-      setFeedback({ message: status === "approved" ? (payload.publishedQuestionIds?.includes(question.id) ? "Questão aprovada e publicada no banco." : "Questão aprovada e salva.") : status === "rejected" ? "Questão rejeitada e salva." : status === "pending_review" ? "Questão mantida em revisão." : "Alterações da questão salvas.", kind: "success" });
+      if (payload.questions)
+        setResult((current) =>
+          current
+            ? {
+                ...current,
+                questions: payload.questions!,
+                publishedQuestionIds: payload.publishedQuestionIds,
+              }
+            : current,
+        );
+      setQuestionDrafts((current) => {
+        const remaining = clearSavedDraft(current, question.id, draft);
+        const revision = payload.questions?.find(item => item.id === question.id)?.revision;
+        return remaining[question.id] && revision ? { ...remaining, [question.id]: { ...remaining[question.id]!, expectedRevision: revision } } : remaining;
+      });
+      setFeedback({
+        message:
+          status === "approved"
+            ? payload.publishedQuestionIds?.includes(question.id)
+              ? "Questão aprovada e publicada no banco."
+              : "Questão aprovada e salva."
+            : status === "rejected"
+              ? "Questão rejeitada e salva."
+              : status === "pending_review"
+                ? "Questão mantida em revisão."
+                : "Alterações da questão salvas.",
+        kind: "success",
+      });
     } catch (error) {
       setFeedback({ message: errorMessage(error), kind: "error" });
     } finally {
@@ -289,25 +359,73 @@ function App() {
     }
   }
 
+  const progress = classificationProgress(classification, result?.questions.length ?? 0);
+
   return (
     <div className="page-shell">
       <SiteHeader />
+      {result && <section className="draft-recovery" aria-label="Rascunhos da revisão">
+        <label><input type="checkbox" checked={keepDrafts} onChange={event => {
+          setKeepDrafts(event.currentTarget.checked);
+          if (!event.currentTarget.checked && result.origin.id) {
+            try { localStorage.removeItem(draftStorageKey(result.origin.id)); setSavedDraft(null); }
+            catch { setDraftWarning("Não foi possível remover o rascunho local."); }
+          }
+        }} /> Guardar rascunhos neste navegador por até 7 dias</label>
+        <p>Use em um dispositivo pessoal. A aprovação só acontece ao salvar no servidor.</p>
+        {savedDraft && <div role="status">
+          <p>Existe um rascunho recuperável. Apenas questões cuja versão não mudou serão restauradas.</p>
+          <button type="button" disabled={!Object.keys(recoverableDrafts(savedDraft, result.questions)).length} onClick={() => {
+            setQuestionDrafts(recoverableDrafts(savedDraft, result.questions)); setKeepDrafts(true); setSavedDraft(null);
+          }}>Recuperar rascunho compatível</button>
+          <button type="button" onClick={() => {
+            const url = URL.createObjectURL(new Blob([JSON.stringify(savedDraft, null, 2)], { type: "application/json" }));
+            const link = document.createElement("a"); link.href = url; link.download = "rascunho-revisao.json"; link.click(); URL.revokeObjectURL(url);
+          }}>Baixar rascunho para conciliar</button>
+          <button type="button" onClick={() => {
+            try { localStorage.removeItem(draftStorageKey(savedDraft.documentId)); setSavedDraft(null); }
+            catch { setDraftWarning("Não foi possível descartar o rascunho."); }
+          }}>Descartar rascunho</button>
+        </div>}
+        {draftWarning && <p role="alert">{draftWarning}</p>}
+      </section>}
 
       <main className={`hero-layout${result ? " has-review" : ""}`}>
         <section className="hero-copy" aria-labelledby="page-title">
-          <div className="eyebrow"><span aria-hidden="true" /> INOVAÇÃO EDUCACIONAL</div>
-          <h1 id="page-title">Seus materiais,<br />prontos para <span>inovar.</span></h1>
-          <p className="intro">Envie provas e atividades para transformar conteúdo educacional em novas possibilidades de aprendizagem.</p>
-          <div className="capabilities" aria-label="Recursos de extração">
-            <span><b aria-hidden="true">✓</b> Extração de texto</span>
-            <span><b aria-hidden="true">✓</b> OCR em português</span>
+          <div className="eyebrow">
+            <span aria-hidden="true" /> INOVAÇÃO EDUCACIONAL
           </div>
-          <div className="formats-note">PDF · PNG · JPG <i aria-hidden="true" /> Arquivos de até 20 MB</div>
+          <h1 id="page-title">
+            Seus materiais,
+            <br />
+            prontos para <span>inovar.</span>
+          </h1>
+          <p className="intro">
+            Envie provas e atividades para transformar conteúdo educacional em novas possibilidades de
+            aprendizagem.
+          </p>
+          <div className="capabilities" aria-label="Recursos de extração">
+            <span>
+              <b aria-hidden="true">✓</b> Extração de texto
+            </span>
+            <span>
+              <b aria-hidden="true">✓</b> OCR em português
+            </span>
+          </div>
+          <div className="formats-note">
+            PDF · PNG · JPG <i aria-hidden="true" /> Arquivos de até 20 MB
+          </div>
         </section>
 
-        <section className="upload-card" aria-labelledby="upload-title" hidden={Boolean(result) && !showUpload}>
+        <section
+          className="upload-card"
+          aria-labelledby="upload-title"
+          hidden={Boolean(result) && !showUpload}
+        >
           <div className="card-heading">
-            <div className="card-icon" aria-hidden="true"><span>↑</span></div>
+            <div className="card-icon" aria-hidden="true">
+              <span>↑</span>
+            </div>
             <div>
               <p className="card-kicker">NOVO MATERIAL</p>
               <h2 id="upload-title">Enviar documento</h2>
@@ -319,12 +437,19 @@ function App() {
             <label
               className={`drop-area${dragging ? " is-dragging" : ""}`}
               htmlFor="document-file"
-              onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDragging(true);
+              }}
               onDragLeave={() => setDragging(false)}
               onDrop={handleDrop}
             >
-              <span className="file-icon" aria-hidden="true">↑</span>
-              <span className="drop-title">{selectedFile ? "Arquivo selecionado" : "Escolha um arquivo"}</span>
+              <span className="file-icon" aria-hidden="true">
+                ↑
+              </span>
+              <span className="drop-title">
+                {selectedFile ? "Arquivo selecionado" : "Escolha um arquivo"}
+              </span>
               <span className="drop-subtitle">ou clique aqui para procurar no dispositivo</span>
               <input
                 ref={fileInput}
@@ -345,16 +470,31 @@ function App() {
               {busy ? "Enviando e processando…" : "Enviar material"}
               {!busy && <span aria-hidden="true">→</span>}
             </button>
-            {busy && <button type="button" onClick={() => uploadCancellation.current?.abort()}>Cancelar envio e processamento</button>}
+            {busy && (
+              <button
+                className="cancel-upload-button"
+                type="button"
+                onClick={() => uploadCancellation.current?.abort()}
+              >
+                Cancelar envio e processamento
+              </button>
+            )}
             {busy && showProcessingHint && (
               <p className="processing-hint" role="status" aria-live="polite">
-                Ainda estamos lendo o documento. Arquivos escaneados podem demorar mais. Você pode cancelar o processamento a qualquer momento.
+                Ainda estamos lendo o documento. Arquivos escaneados podem demorar mais. Você pode cancelar o
+                processamento a qualquer momento.
               </p>
             )}
           </form>
 
-          {!result && feedback && <div className={`feedback ${feedback.kind}`} role="status" aria-live="polite">{feedback.message}</div>}
-          <p className="privacy-note"><span aria-hidden="true">◆</span> O documento é validado antes de ser processado.</p>
+          {!result && feedback && (
+            <div className={`feedback ${feedback.kind}`} role="status" aria-live="polite">
+              {feedback.message}
+            </div>
+          )}
+          <p className="privacy-note">
+            <span aria-hidden="true">◆</span> O documento é validado antes de ser processado.
+          </p>
         </section>
 
         {result && (
@@ -364,15 +504,29 @@ function App() {
                 <p className="card-kicker">ETAPA DE REVISÃO</p>
                 <h1 id="review-title">Revisar questões</h1>
                 <p className="document-name">{result.origin.fileName}</p>
-                <div className="review-progress"><span>{result.questions.filter(q => q.status === "approved").length} aprovadas</span><span>{result.questions.filter(q => q.status === "pending_review").length} em revisão</span><span>{result.questions.filter(q => q.status === "rejected").length} rejeitadas</span></div>
-                <button className="new-document-button" type="button" onClick={() => setShowUpload(v => !v)}>{showUpload ? "Fechar envio" : "Enviar outro documento"}</button>
+                <div className="review-progress">
+                  <span>{result.questions.filter((q) => q.status === "approved").length} aprovadas</span>
+                  <span>
+                    {result.questions.filter((q) => q.status === "pending_review").length} em revisão
+                  </span>
+                  <span>{result.questions.filter((q) => q.status === "rejected").length} rejeitadas</span>
+                </div>
+                <button
+                  className="new-document-button"
+                  type="button"
+                  onClick={() => setShowUpload((v) => !v)}
+                >
+                  {showUpload ? "Fechar envio" : "Enviar outro documento"}
+                </button>
                 <p className="review-summary">
                   {result.questionCount === 0
                     ? "O texto foi extraído, mas não encontramos enunciados com segurança suficiente."
                     : `${result.questionCount} questão(ões) encontradas · ${result.pages} página(s) · extração por ${extractionMethodLabel(result.method)}`}
                 </p>
                 {result.identification && (
-                  <details className={`identification-diagnostic ${result.identification.method === "rules" ? "is-fallback" : ""}`} >
+                  <details
+                    className={`identification-diagnostic ${result.identification.method === "rules" ? "is-fallback" : ""}`}
+                  >
                     <summary>Detalhes do processamento</summary>
                     <strong>{identifierLabel(result.identification.method)}</strong>
                     {result.identification.model && <span>Modelo: {result.identification.model}</span>}
@@ -383,133 +537,326 @@ function App() {
                         : ` · Identificação: ${durationLabel(result.identification.durationMs)}`}
                     </span>
                     {result.identification.ollama?.promptTokens !== undefined && (
-                      <span>Tokens de entrada: {result.identification.ollama.promptTokens} · Resposta: {result.identification.ollama.outputTokens ?? 0} tokens</span>
+                      <span>
+                        Tokens de entrada: {result.identification.ollama.promptTokens} · Resposta:{" "}
+                        {result.identification.ollama.outputTokens ?? 0} tokens
+                      </span>
                     )}
                     {result.identification.reason && <span>{result.identification.reason}</span>}
                   </details>
                 )}
               </div>
-              <span className="review-count" aria-label={`${result.questionCount} questões`}>{result.questionCount}</span>
             </div>
 
-            {feedback && <div className={`feedback ${feedback.kind}`} role="status">{feedback.message}</div>}
+            {feedback && (
+              <div className={`feedback ${feedback.kind}`} role="status">
+                {feedback.message}
+              </div>
+            )}
             {result.questions.length > 0 ? (
               <div className="questions-list">
                 <nav className="question-navigation" aria-label="Navegar pelas questões">
-                  <button type="button" disabled={selectedQuestion === 0} onClick={() => setSelectedQuestion(n => n - 1)}>Anterior</button>
-                  <label>Questão<select value={selectedQuestion} onChange={event => setSelectedQuestion(Number(event.currentTarget.value))}>
-                    {result.questions.map((q, i) => <option key={q.id} value={i}>Questão {q.number ?? i + 1} — {q.status === "approved" ? "Aprovada" : q.status === "rejected" ? "Rejeitada" : "Em revisão"}</option>)}
-                  </select></label>
-                  <span>{selectedQuestion + 1} de {result.questions.length}</span>
-                  <button type="button" disabled={selectedQuestion === result.questions.length - 1} onClick={() => setSelectedQuestion(n => n + 1)}>Próxima</button>
+                  <button
+                    type="button"
+                    disabled={selectedQuestion === 0}
+                    onClick={() => setSelectedQuestion((n) => n - 1)}
+                  >
+                    Anterior
+                  </button>
+                  <label>
+                    Questão
+                    <select
+                      value={selectedQuestion}
+                      onChange={(event) => setSelectedQuestion(Number(event.currentTarget.value))}
+                    >
+                      {result.questions.map((q, i) => (
+                        <option key={q.id} value={i}>
+                          Questão {q.number ?? i + 1} —{" "}
+                          {q.status === "approved"
+                            ? "Aprovada"
+                            : q.status === "rejected"
+                              ? "Rejeitada"
+                              : "Em revisão"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <span>
+                    {selectedQuestion + 1} de {result.questions.length}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={selectedQuestion === result.questions.length - 1}
+                    onClick={() => setSelectedQuestion((n) => n + 1)}
+                  >
+                    Próxima
+                  </button>
                 </nav>
-                {result.questions.map((question, index) => ({ question, index })).filter(({ index }) => index === selectedQuestion).map(({ question, index }) => (
-                  <article className="question-item" key={question.id}>
-                    <div className="question-meta">
-                      <span className="question-label">Questão {question.number ?? index + 1}</span>
-                      {questionDrafts[question.id] && <span className="unsaved-badge">Alterações não salvas</span>}
-                      <span className="question-page">
-                        {question.pageStart === null ? "Página desconhecida" : question.pageStart === question.pageEnd
-                          ? `Página ${question.pageStart}`
-                          : `Páginas ${question.pageStart}–${question.pageEnd}`}
-                      </span>
-                    </div>
-                    <div className="question-columns"><div className="question-content">
-                    {result.origin.id && <VisualSourceEditor documentId={result.origin.id} pages={result.pages} content={questionDraft(question)} onChange={change=>setQuestionDrafts(current=>({...current,[question.id]:{...questionDraft(question),...change}}))} />}
-                    <span className="question-type">
-                      {getResponseTypeLabel()}
-                    </span>
-                    <section className="question-section">
-                      <h3>Enunciado</h3>
-                      <p className="question-text">{question.prompt ?? question.text}</p>
-                      {question.missingComponents?.includes("prompt") && (
-                        <p className="question-answer-empty">Enunciado não identificado com segurança; revise o texto completo.</p>
-                      )}
-                    </section>
-                    {question.missingComponents?.some((component) => component !== "prompt") && (
-                      <p className="question-answer-empty">
-                        {question.missingComponents.includes("alternatives") && "Alternativas não identificadas. "}
-                        {question.missingComponents.includes("answer") && "Gabarito não identificado no documento."}
-                      </p>
-                    )}
-                    <section className="question-section">
-                      <h3>Alternativas</h3>
-                      {question.alternatives && question.alternatives.length > 0 ? (
-                        <ul className="question-alternatives">
-                          {question.alternatives.map((alternative, alternativeIndex) => (
-                            <li key={`${alternative.label}-${alternativeIndex}`}>
-                              <strong>{alternative.label}</strong> {alternative.text}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="question-answer-empty">
-                          {getMissingAnswerMessage()}
-                        </p>
-                      )}
-                    </section>
-                    <QuestionContentEditor content={questionDraft(question)} onChange={change => setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), ...change } }))} />
-                    </div><aside className="question-inspector" aria-label="Revisão e classificação">
-                    <h3>03 · Gabarito e revisão</h3>
-
-                    {question.responseType === "multiple_choice" && (
-                      <label className="question-edit-field">
-                        <span>Selecione o gabarito</span>
-                        <select value={questionDraft(question).answerKey ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), answerKey: value || null } })); }}>
-                          <option value="">Selecione uma alternativa</option>
-                          {questionDraft(question).alternatives.map((alternative, alternativeIndex) => (
-                            <option key={alternativeIndex} value={alternative.label}>{alternative.label} — {alternative.text}</option>
-                          ))}
-                        </select>
-                      </label>
-                    )}
-                    {question.answerKey && <p className="question-answer-empty"><strong>Gabarito registrado:</strong> {question.answerKey}</p>}
-                    <details className="question-pedagogy" open>
-                      <summary>04 · Classificação pedagógica</summary>
-                      <div className="analysis-toolbar" aria-label="Status da classificação pedagógica"><span className="classification-state">{classification?.status === "completed" ? "Concluída" : classification?.status === "failed" ? "Precisa de atenção" : classification?.status === "cancelled" ? "Cancelada" : "Em andamento"}</span><div role="status" aria-live="polite">
-                        <p>Classificação: {result.questions.length === 0 ? "Nenhuma questão identificada; IA não será executada" : classification?.status === "cancelled" ? "cancelada" : classification?.status === "completed" ? "concluída" : classification?.status === "failed" ? classification.error : `em andamento (${classification?.suggestions.length ?? 0} classificadas); você já pode revisar as questões`}</p>
-                        {(classification?.status === "running" || classification?.status === "queued") && <button type="button" onClick={async () => {
-                          try {
-                            const response = await fetch(`/documents/${encodeURIComponent(result.origin.id ?? "")}/classification/cancel`, { method: "POST" });
-                            setClassification(await readApiResponse<PedagogicalJob>(response));
-                          } catch (error) { setClassification(current => ({ ...current, status: "failed", suggestions: current?.suggestions ?? [], error: errorMessage(error) })); }
-                        }}>Cancelar classificação</button>}
-
-                        {classification?.stale && <p>O conteúdo foi alterado após a análise. Solicite uma nova análise.</p>}
-                        <button type="button" disabled={result.questions.length === 0 || classification?.status === "running" || classification?.status === "queued"} onClick={() => setAnalysisAttempt(n => n + 1)}>Classificar novamente</button>
-                    </div></div>
-
-                      {classification?.suggestions.filter(s => s.questionId === question.id && s.processingMs !== undefined).map(s => <p className="classification-timing" key={s.questionId}>Tempo de classificação: {(s.processingMs! / 1000).toFixed(1)} s · {s.targetMet ? "Dentro" : "Acima"} da meta de {(s.targetMs ?? 15000) / 1000} s</p>)}
-                      <p className="editor-help">A IA preenche os campos vazios. Confira os dados e salve. BNCC não é preenchida automaticamente.</p>
-                      <label className="question-edit-field"><span>Área do conhecimento</span><input value={questionDraft(question).pedagogy.area ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, area: value } } })); }} /></label>
-                      <label className="question-edit-field"><span>Tipo de questão</span><input value={questionDraft(question).pedagogy.questionType ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts(current => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, questionType: value } } })); }} /></label>
-                      <div className="pedagogy-fields">
-                        <label className="question-edit-field"><span>Disciplina</span><input value={questionDraft(question).pedagogy.discipline ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, discipline: value } } })); }} /></label>
-                        <label className="question-edit-field"><span>Ano/série</span><input value={questionDraft(question).pedagogy.grade ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, grade: value } } })); }} /></label>
-                        <label className="question-edit-field"><span>Tema</span><input value={questionDraft(question).pedagogy.topic ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, topic: value } } })); }} /></label>
-                        <label className="question-edit-field"><span>Habilidades BNCC (separadas por vírgula)</span><input value={questionDraft(question).pedagogy.bnccSkills?.join(", ") ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, bnccSkills: value.split(",").map((item) => item.trim()).filter(Boolean) } } })); }} /></label>
-                        <label className="question-edit-field"><span>Descritor</span><input value={questionDraft(question).pedagogy.descriptor ?? ""} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, descriptor: value } } })); }} /></label>
-                        <label className="question-edit-field"><span>Dificuldade</span><select value={questionDraft(question).pedagogy.difficulty ?? "unknown"} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), pedagogy: { ...questionDraft(question).pedagogy, difficulty: value as NonNullable<Question["pedagogy"]>["difficulty"] } } })); }}><option value="unknown">Não definida</option><option value="easy">Fácil</option><option value="medium">Média</option><option value="hard">Difícil</option></select></label>
+                {result.questions
+                  .map((question, index) => ({ question, index }))
+                  .filter(({ index }) => index === selectedQuestion)
+                  .map(({ question, index }) => (
+                    <article className="question-item" key={question.id}>
+                      <div className="question-meta">
+                        <span className="question-label">Questão {question.number ?? index + 1}</span>
+                        {questionDrafts[question.id] && (
+                          <span className="unsaved-badge">Alterações não salvas</span>
+                        )}
+                        <span className="question-page">
+                          {question.pageStart === null
+                            ? "Página desconhecida"
+                            : question.pageStart === question.pageEnd
+                              ? `Página ${question.pageStart}`
+                              : `Páginas ${question.pageStart}–${question.pageEnd}`}
+                        </span>
                       </div>
-                    </details>
-                    <label className="question-edit-field">
-                      <span>Responsável pela revisão</span>
-                      <input value={questionDraft(question).reviewedBy} onChange={(event) => { const value = event.currentTarget.value; setQuestionDrafts((current) => ({ ...current, [question.id]: { ...questionDraft(question), reviewedBy: value } })); }} maxLength={120} />
-                    </label>
-                    {question.status === "approved" && result.publishedQuestionIds && <p className="editor-help">{result.publishedQuestionIds.includes(question.id) ? "Publicada no banco de questões." : "Esta aprovação antiga tem pendências. Confira enunciado, alternativas, gabarito e responsável antes de salvar."}</p>}
-                    <span className="question-status">{question.status === "approved" ? "Aprovada" : question.status === "rejected" ? "Rejeitada" : "Aguardando revisão"}</span>
-                    <div className="question-actions">
-                      <button type="button" onClick={() => void saveQuestion(question)} disabled={savingQuestion !== null}>{savingQuestion === question.id ? "Salvando…" : "Salvar alterações"}</button>
-                      <button type="button" onClick={() => void saveQuestion(question, "pending_review")} disabled={savingQuestion !== null}>Manter em revisão</button>
-                      <button type="button" onClick={() => void saveQuestion(question, "approved")} disabled={savingQuestion !== null}>Aprovar</button>
-                      <button type="button" onClick={() => void saveQuestion(question, "rejected")} disabled={savingQuestion !== null}>Rejeitar</button>
-                    </div>
-                    </aside></div>
-                  </article>
-                ))}
+                      <div className="question-columns">
+                        <div className="question-content">
+                          {result.origin.id && (
+                            <VisualSourceEditor
+                              documentId={result.origin.id}
+                              pages={result.pages}
+                              content={questionDraft(question)}
+                              onChange={(change) =>
+                                setQuestionDrafts((current) => ({
+                                  ...current,
+                                  [question.id]: {
+                                    ...questionDraft(question),
+                                    ...change,
+                                  },
+                                }))
+                              }
+                            />
+                          )}
+                          <span className="question-type">{getResponseTypeLabel()}</span>
+                          <section className="question-section">
+                            <h3>Enunciado</h3>
+                            <p className="question-text">{question.prompt ?? question.text}</p>
+                            {question.missingComponents?.includes("prompt") && (
+                              <p className="question-answer-empty">
+                                Enunciado não identificado com segurança; revise o texto completo.
+                              </p>
+                            )}
+                          </section>
+                          {question.missingComponents?.some((component) => component !== "prompt") && (
+                            <p className="question-answer-empty">
+                              {question.missingComponents.includes("alternatives") &&
+                                "Alternativas incompletas ou com sequência a conferir. "}
+                              {question.missingComponents.includes("answer") &&
+                                "Gabarito não identificado no documento."}
+                            </p>
+                          )}
+                          <section className="question-section">
+                            <h3>Alternativas</h3>
+                            {question.alternatives && question.alternatives.length > 0 ? (
+                              <ul className="question-alternatives">
+                                {question.alternatives.map((alternative, alternativeIndex) => (
+                                  <li key={`${alternative.label}-${alternativeIndex}`}>
+                                    <strong>{alternative.label}</strong> {alternative.text}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="question-answer-empty">{getMissingAnswerMessage()}</p>
+                            )}
+                          </section>
+                          <QuestionContentEditor
+                            content={questionDraft(question)}
+                            onChange={(change) =>
+                              setQuestionDrafts((current) => ({
+                                ...current,
+                                [question.id]: {
+                                  ...questionDraft(question),
+                                  ...change,
+                                },
+                              }))
+                            }
+                          />
+                        </div>
+                        <aside className="question-inspector" aria-label="Revisão e classificação">
+                          <h3>03 · Gabarito e revisão</h3>
+
+                          {question.responseType === "multiple_choice" && (
+                            <label className="question-edit-field">
+                              <span>Selecione o gabarito</span>
+                              <select
+                                value={questionDraft(question).answerKey ?? ""}
+                                onChange={(event) => {
+                                  const value = event.currentTarget.value;
+                                  setQuestionDrafts((current) => ({
+                                    ...current,
+                                    [question.id]: {
+                                      ...questionDraft(question),
+                                      answerKey: value || null,
+                                    },
+                                  }));
+                                }}
+                              >
+                                <option value="">Selecione uma alternativa</option>
+                                {questionDraft(question).alternatives.map((alternative, alternativeIndex) => (
+                                  <option key={alternativeIndex} value={alternative.label}>
+                                    {alternative.label} — {alternative.text}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
+                          {question.answerKey && (
+                            <p className="question-answer-empty">
+                              <strong>Gabarito registrado:</strong> {question.answerKey}
+                            </p>
+                          )}
+                          <details className="question-pedagogy" open>
+                            <summary>04 · Classificação pedagógica</summary>
+                            <div className="analysis-toolbar" aria-label="Status da classificação pedagógica">
+                              <span className="classification-state">{progress.label}</span>
+                              <div role="status" aria-live="polite">
+                                <p>{progress.message}</p>
+
+                                {(classification?.status === "running" ||
+                                  classification?.status === "queued") && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        const response = await fetch(
+                                          `/documents/${encodeURIComponent(result.origin.id ?? "")}/classification/cancel`,
+                                          { method: "POST" },
+                                        );
+                                        setClassification(await readApiResponse<PedagogicalJob>(response));
+                                      } catch (error) {
+                                        setClassification((current) => ({
+                                          ...current,
+                                          status: "failed",
+                                          suggestions: current?.suggestions ?? [],
+                                          error: errorMessage(error),
+                                        }));
+                                      }
+                                    }}
+                                  >
+                                    Cancelar classificação
+                                  </button>
+                                )}
+
+                                {classification?.stale && (
+                                  <p>O conteúdo foi alterado após a análise. Solicite uma nova análise.</p>
+                                )}
+                                <button
+                                  type="button"
+                                  disabled={
+                                    classification?.status === "running" ||
+                                    classification?.status === "queued"
+                                  }
+                                  onClick={() => setAnalysisAttempt((n) => n + 1)}
+                                >
+                                  Classificar novamente
+                                </button>
+                              </div>
+                            </div>
+
+                            {classification?.suggestions
+                              .filter((s) => s.questionId === question.id && s.processingMs !== undefined)
+                              .map((s) => (
+                                <p className="classification-timing" key={s.questionId}>
+                                  Tempo de classificação: {(s.processingMs! / 1000).toFixed(1)} s ·{" "}
+                                  {s.targetMet ? "Dentro" : "Acima"} da meta de {(s.targetMs ?? 15000) / 1000}{" "}
+                                  s
+                                </p>
+                              ))}
+                            <p className="editor-help">
+                              A IA preenche os campos vazios. Confira os dados e salve. BNCC não é preenchida
+                              automaticamente.
+                            </p>
+                            <PedagogyFields
+                              pedagogy={questionDraft(question).pedagogy}
+                              onChange={(change) =>
+                                setQuestionDrafts((current) => {
+                                  const draft = current[question.id] ?? createQuestionDraft(question);
+                                  return {
+                                    ...current,
+                                    [question.id]: {
+                                      ...draft,
+                                      pedagogy: {
+                                        ...draft.pedagogy,
+                                        ...change,
+                                      },
+                                    },
+                                  };
+                                })
+                              }
+                            />
+                          </details>
+                          <label className="question-edit-field">
+                            <span>Responsável pela revisão</span>
+                            <input
+                              value={questionDraft(question).reviewedBy}
+                              onChange={(event) => {
+                                const value = event.currentTarget.value;
+                                setQuestionDrafts((current) => ({
+                                  ...current,
+                                  [question.id]: {
+                                    ...questionDraft(question),
+                                    reviewedBy: value,
+                                  },
+                                }));
+                              }}
+                              maxLength={120}
+                            />
+                          </label>
+                          {question.status === "approved" && result.publishedQuestionIds && (
+                            <p className="editor-help">
+                              {result.publishedQuestionIds.includes(question.id)
+                                ? "Publicada no banco de questões."
+                                : "Esta aprovação antiga tem pendências. Confira enunciado, alternativas, gabarito e responsável antes de salvar."}
+                            </p>
+                          )}
+                          <span className="question-status">
+                            {question.status === "approved"
+                              ? "Aprovada"
+                              : question.status === "rejected"
+                                ? "Rejeitada"
+                                : "Aguardando revisão"}
+                          </span>
+                          <div className="question-actions">
+                            <button
+                              type="button"
+                              onClick={() => void saveQuestion(question)}
+                              disabled={savingQuestion !== null}
+                            >
+                              {savingQuestion === question.id ? "Salvando…" : "Salvar alterações"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void saveQuestion(question, "pending_review")}
+                              disabled={savingQuestion !== null}
+                            >
+                              Manter em revisão
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void saveQuestion(question, "approved")}
+                              disabled={savingQuestion !== null}
+                            >
+                              Aprovar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void saveQuestion(question, "rejected")}
+                              disabled={savingQuestion !== null}
+                            >
+                              Rejeitar
+                            </button>
+                          </div>
+                        </aside>
+                      </div>
+                    </article>
+                  ))}
               </div>
             ) : (
-              <p className="no-questions">Nenhuma questão foi enviada como válida. Confira o texto extraído ou envie uma versão mais nítida e com a numeração das questões visível.</p>
+              <p className="no-questions">
+                Nenhuma questão foi enviada como válida. Confira o texto extraído ou envie uma versão mais
+                nítida e com a numeração das questões visível.
+              </p>
             )}
 
             {result.text && (
@@ -518,17 +865,16 @@ function App() {
                 <pre>{result.text}</pre>
               </details>
             )}
-            <a className="review-record-link" href={result.origin.id ? `/?review=${encodeURIComponent(result.origin.id)}` : result.reviewUrl}>
-              Abrir registro completo da revisão ↗
-            </a>
           </section>
         )}
       </main>
 
-      <footer><span>MENTARY</span><i aria-hidden="true" /> TECNOLOGIA QUE MOVE A EDUCAÇÃO</footer>
+      <footer>
+        <span>MENTARY</span>
+        <i aria-hidden="true" /> TECNOLOGIA QUE MOVE A EDUCAÇÃO
+      </footer>
     </div>
   );
 }
 
 export { App };
-

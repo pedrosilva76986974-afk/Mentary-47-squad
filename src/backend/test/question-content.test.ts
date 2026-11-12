@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { identifyQuestions } from "../src/services/question-identification.service.js";
 
-const previousIdentifier = process.env.QUESTION_IDENTIFIER;
-process.env.QUESTION_IDENTIFIER = "rules";
 
 test("keeps only objective questions and preserves incomplete objective items for review", async () => {
   const questions = await identifyQuestions([
@@ -56,9 +54,4 @@ test("numeric dotted choices and numeric answer key remain attached to question 
   assert.equal(questions[0]!.answerKey, "1");
   assert.equal(questions[1]!.answerKey, "B");
   assert.doesNotMatch(questions[0]!.prompt!, /x1=/);
-});
-
-test.after(() => {
-  if (previousIdentifier === undefined) delete process.env.QUESTION_IDENTIFIER;
-  else process.env.QUESTION_IDENTIFIER = previousIdentifier;
 });

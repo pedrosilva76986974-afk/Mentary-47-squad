@@ -41,6 +41,7 @@ classDiagram
     +string kind
     +string association
     +Region region
+    +OptionalString extractionWarning
   }
   class Region {
     +number x

@@ -22,7 +22,28 @@ Os casos abaixo foram simulados com dados sintéticos e possuem verificações r
 
 ## Como reproduzir
 
+Regressões acrescentadas na auditoria de 11/11/2026:
+
+| ID | Reprodução | Resultado esperado | Evidência |
+| --- | --- | --- | --- |
+| VISUAL-03 | Alterar a página do primeiro recorte com outras referências vinculadas | Mostrar a nova referência primeiro, preservando secundárias sem duplicar a página | source-editing.test.ts |
+| VISUAL-04 | Inspeção de imagem corrompida em página com texto legível | Gerar aviso e continuar; cancelamento deve continuar interrompendo | visual-detection.test.ts |
+| VISUAL-05 | Salvar responsável sem confirmar referência visual incerta | Preservar aviso e associação; limpar somente ao confirmar recorte | documents.test.ts |
+| REVISAO-01 | Salvar alternativas vazias ou com rótulos duplicados como pendente | Aviso idêntico na resposta e após reabrir | documents.test.ts |
+| REVISAO-02 | Editar novamente enquanto o salvamento anterior está em andamento | Resposta anterior não apaga o rascunho mais recente | review-draft.test.ts |
+| IA-03 | Cancelar ou falhar depois de uma questão classificada | Identificar resultados como parciais preservados | classification-progress.test.ts |
+
 No backend: npm test; npm run test:postgres; npm run test:ocr. A integração PostgreSQL cria uma base com nome aleatório e remove apenas essa base. Não executa reset no banco da aplicação.
+
+Segunda rodada de 12/11/2026:
+
+| ID | Reprodução | Resultado esperado | Evidência |
+| --- | --- | --- | --- |
+| REVISAO-03 | PATCH simultâneo de duas questões do mesmo documento | Preservar ambas as edições na instância atual | documents.test.ts, postgres.integration.test.ts e document-lock.test.ts |
+| RETENCAO-01 | Expirar documento com snapshot pedagógico salvo | Remover também a classificação; preservar documentos recentes e publicados | document-retention.test.ts e postgres.integration.test.ts |
+| RETENCAO-02 | Expirar enquanto a classificação está ativa | Adiar; limpar após finalizar cancelamento sem recriar o snapshot | retention-classification.test.ts |
+| API-01 | Enviar JSON inválido ou acima do limite | HTTP 400/413, sem consulta ao banco nem vazamento de detalhes do parser | http-errors.test.ts |
+| PDF-01 | PDF com página excessiva ou recorte minúsculo que exige canvas gigante | Rejeitar antes de renderizar ou iniciar OCR | canvas-limits.test.ts |
 
 ## Limites conhecidos
 

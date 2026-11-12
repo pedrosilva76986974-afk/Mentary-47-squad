@@ -42,6 +42,14 @@ Páginas desconhecidas são null em ambos os limites, nunca zero ou uma página 
 
 Rollbacks não são executados automaticamente. O rollback 005 recusa remoção quando existem publicações; o 006 recusa conversão quando há páginas desconhecidas. Essas proteções são testadas em banco temporário. Não usar DROP CASCADE nem apagar volumes para atualizar o projeto.
 
-## Backup
+## Concorrência de revisão
+
+Consultas de revisão leem documento, questões e alternativas em um cliente PostgreSQL e uma transação `REPEATABLE READ READ ONLY`. Isso evita combinar versões de commits diferentes. Alterações do mesmo documento são serializadas pelo backend atual antes da leitura/modificação/gravação; publicação continua na transação de escrita.
+
+A trava de aplicação está em memória e não coordena servidores distintos. Controle de versão da revisão e bloqueio transacional entre processos permanecem na issue #38. Não usar múltiplas instâncias como se essa garantia já existisse.
+
+## Backup e retenção
 
 Preservar conjuntamente o dump PostgreSQL e src/backend/uploads (manifesto, arquivos originais, classificações e revisões legadas). Para recuperação, restaurar ambos no mesmo ponto de consistência e iniciar a API para aplicar somente migrações ainda não registradas. A remoção do container sem remover o volume mantém o banco; não executar down -v para atualização comum.
+
+A retenção também exclui o snapshot de classificação do documento expirado. Análises ativas são adiadas; fontes com publicação ativa continuam protegidas. Não há uma transação única abrangendo filesystem e PostgreSQL: falhas precisam ser registradas e repetidas, preservando o manifesto até concluir a limpeza.

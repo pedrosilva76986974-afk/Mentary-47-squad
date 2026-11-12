@@ -40,4 +40,3 @@ function classifyQuestionLine(line: string): ClassifiedQuestionLine {
 }
 
 export { classifyQuestionLine };
-export type { ClassifiedQuestionLine };

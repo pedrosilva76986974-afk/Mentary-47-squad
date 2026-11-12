@@ -42,6 +42,7 @@ async function initializeDatabase(): Promise<void> {
         "005_local_question_bank",
         "006_unknown_source_page",
         "007_bank_integrity",
+        "008_durable_jobs_and_assessments",
       ];
       for (const migrationVersion of migrationVersions) {
         const applied = await connection.query("SELECT version FROM schema_migrations WHERE version = $1", [migrationVersion]);
@@ -60,8 +61,11 @@ async function initializeDatabase(): Promise<void> {
         }
       }
     } finally {
-      await connection.query("SELECT pg_advisory_unlock(471701)");
-      connection.release();
+      try {
+        await connection.query("SELECT pg_advisory_unlock(471701)");
+      } finally {
+        connection.release();
+      }
     }
   })();
   try {

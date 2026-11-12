@@ -1,3 +1,5 @@
+import { detectVisualReference } from "./visual-detection.service.js";
+import { assertRenderSize } from "./canvas-limits.service.js";
 import { locateQuestionRegions, type QuestionRegion, type PositionedText } from "./question-regions.service.js";
 import type { Region } from "./source-preview.service.js";
 import { createCanvas } from "@napi-rs/canvas";
@@ -17,7 +19,7 @@ type ExtractionResult = {
   questionRegions?: QuestionRegion[];
 };
 
-type VisualPageReference = { page: number; kind: "image" | "graphic"; region?: Region; association?: "automatic" | "manual" | "unconfirmed" };
+type VisualPageReference = { page: number; kind: "image" | "graphic"; region?: Region; association?: "automatic" | "manual" | "unconfirmed"; extractionWarning?: string };
 
 type ImageRecognizer = (image: Buffer, signal?: AbortSignal) => Promise<string | { text: string; lines: PositionedText[] }>;
 
@@ -201,22 +203,6 @@ function hasBrokenTextLayer(text: string): boolean {
   return replacementCharacters >= 2 || suspiciousSequences >= 1;
 }
 
-async function detectPageVisuals(page: pdfjs.PDFPageProxy): Promise<VisualPageReference["kind"] | undefined> {
-  const { fnArray } = await page.getOperatorList();
-  const imageOperators = new Set<number>([
-    pdfjs.OPS.paintImageXObject,
-    pdfjs.OPS.paintImageXObjectRepeat,
-    pdfjs.OPS.paintInlineImageXObject,
-    pdfjs.OPS.paintInlineImageXObjectGroup,
-    pdfjs.OPS.paintImageMaskXObject,
-    pdfjs.OPS.paintImageMaskXObjectGroup,
-  ]);
-  if (fnArray.some((operation) => imageOperators.has(operation))) return "image";
-
-  const pathCount = fnArray.filter((operation) => operation === pdfjs.OPS.constructPath).length;
-  return pathCount >= 1 ? "graphic" : undefined;
-}
-
 async function extractPdf(buffer: Buffer, recognize: ImageRecognizer, signal?: AbortSignal): Promise<ExtractionResult> {
   signal?.throwIfAborted();
   const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer), standardFontDataUrl });
@@ -236,8 +222,8 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer, signal?: A
       const content = await page.getTextContent();
       const [xMin, yMin, xMax, yMax] = page.view;
       pageContents.push({ items: content.items, width: xMax - xMin, height: yMax - yMin, yMin });
-      const visualKind = await detectPageVisuals(page);
-      if (visualKind) visualPages.push({ page: pageNumber, kind: visualKind });
+      const visualReference = await detectVisualReference(page, pageNumber, signal);
+      if (visualReference) visualPages.push(visualReference);
     }
     const repeatedArtifacts = findRepeatedPageArtifacts(pageContents);
     const pageTexts: string[] = [];
@@ -258,6 +244,7 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer, signal?: A
       }
 
       const viewport = page.getViewport({ scale: 1.6 });
+      assertRenderSize(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const context = canvas.getContext("2d");
       const render = page.render({ canvas: canvas as never, canvasContext: context as never, viewport });
