@@ -3,6 +3,12 @@ import { test } from "node:test";
 import type { PedagogicalJob } from "../../frontend/src/types/review.js";
 import { classificationProgress } from "../../frontend/src/utils/classification-progress.js";
 
+test("previously stored fetch failures display recovery instructions", () => {
+  const progress = classificationProgress({ status: "failed", error: "fetch failed", suggestions: [] }, 1);
+  assert.match(progress.message, /Abra o Ollama.*Classificar novamente/);
+  assert.doesNotMatch(progress.message, /fetch failed/);
+});
+
 test("cancelled and failed classifications explicitly distinguish partial results from completion", () => {
   const suggestions: PedagogicalJob["suggestions"] = [{
     questionId: "q1", area: "Matemática", discipline: "Matemática", questionType: "Múltipla escolha",
