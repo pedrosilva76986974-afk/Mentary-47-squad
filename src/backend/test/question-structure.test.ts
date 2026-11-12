@@ -78,3 +78,4 @@ test("repairs OCR option labels that look like question numbers without inventin
   assert.equal(questions[2]?.responseType, "multiple_choice");
   assert.match(questions[2]?.prompt ?? "", /a que gênero textual ele pertence/);
 });
+

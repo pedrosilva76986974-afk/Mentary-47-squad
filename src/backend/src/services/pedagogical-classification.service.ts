@@ -6,7 +6,11 @@ import { performance } from "node:perf_hooks";
 import { classifyPedagogy, classificationTargetMs, type PedagogicalSuggestion } from "./ollama.service.js";
 import { getReviewResult } from "./review-results.service.js";
 import { DocumentValidationError } from "./document-validation.service.js";
-type ClassificationJob = {
+import { isDatabaseConfigured } from "./database.service.js";
+import { getDurableClassification, startDurableClassification, cancelDurableClassification, durableClassificationIsActive, removeDurableClassification } from "./durable-classification.service.js";
+export type ClassificationJob = {
+  nextIndex?: number;
+  attempts?: number;
   version?: number;
   source?: ReturnType<typeof questionSnapshot>;
   documentId: string;
@@ -85,10 +89,12 @@ async function save(job: ClassificationJob): Promise<void> {
   }
 }
 export async function getClassification(id: string): Promise<ClassificationJob | undefined> {
+  classificationFilePath(id);
   return withDocumentLock(id, () => getClassificationUnlocked(id));
 }
 
 async function getClassificationUnlocked(id: string): Promise<ClassificationJob | undefined> {
+  if (isDatabaseConfigured()) return getDurableClassification(id);
   if (activeJobs.has(id)) return structuredClone(activeJobs.get(id)!);
   try {
     const job = JSON.parse(await readFile(classificationFilePath(id), "utf8")) as ClassificationJob;
@@ -109,6 +115,7 @@ export async function startClassification(id: string): Promise<ClassificationJob
 
 async function startClassificationUnlocked(id: string): Promise<ClassificationJob | undefined> {
   classificationFilePath(id);
+  if (isDatabaseConfigured()) return startDurableClassification(id);
   const review = await getReviewResult(id);
   if (!review) return undefined;
   if (review.questions.length === 0)
@@ -228,8 +235,14 @@ export function classificationIsActive(id: string): boolean {
   return activeJobs.has(id);
 }
 
+export async function classificationIsActiveAcrossServers(id: string): Promise<boolean> {
+  return classificationIsActive(id) || (isDatabaseConfigured() && await durableClassificationIsActive(id));
+}
+
 /** Call while holding the document lock, after excluding active jobs. */
 export async function removeClassification(id: string): Promise<void> {
+  if (await classificationIsActiveAcrossServers(id)) throw new Error("A classificação ainda está em processamento.");
+  if (isDatabaseConfigured()) await removeDurableClassification(id);
   if (classificationIsActive(id)) throw new Error("A classificação ainda está em processamento.");
   const file = classificationFilePath(id);
   await pendingWrites.get(file);
@@ -259,6 +272,7 @@ export async function classificationIsStale(id: string, job: ClassificationJob):
 
 export async function cancelClassification(id: string): Promise<ClassificationJob | undefined> {
   classificationFilePath(id);
+  if (isDatabaseConfigured()) return withDocumentLock(id, () => cancelDurableClassification(id));
   const current = activeJobs.get(id);
   if (!current) return getClassification(id);
   if (!["queued", "running"].includes(current.status)) return structuredClone(current);

@@ -267,3 +267,17 @@ Corrigidos seis problemas observados: digitação de várias habilidades BNCC co
 JSON exportado conferido com duas habilidades separadas e gabarito correto. Publicação fictícia retirada ao final; nenhuma revisão real foi alterada. Cancelamento de envio durante OCR confirmado pela interface; inspeção posterior revelou processamento residual na API. Após corrigir o proxy, requisição real abortada deixou zero novos registros. Teste de regressão falhou com a configuração anterior e passou com a corrigida. Capturas locais em tmp/ux-20261112.
 
 Lint/build frontend e backend aprovados. Suíte geral: 138 testes, 136 aprovados, zero falhas, duas integrações opcionais separadas. O CI do commit final valida também PostgreSQL e OCR reais. Omissão de texto pelo OCR continua possível; a nova heurística sinaliza a lacuna sem inventar conteúdo.
+
+## 12/11/2026 — Recuperação, concorrência e início de avaliações
+
+Login/autorização retirados do escopo deste módulo por decisão do responsável: serão fornecidos pelo sistema principal. CI do PR #26 integrado à branch de trabalho no GitHub. Seletor PC/Celular incluído na entrega.
+
+Rascunhos locais optativos por até sete dias, recuperação/descarte/download e bloqueio de restauração sobre versão modificada. Questões recebem hash de revisão; o frontend envia a versão esperada e recebe 409 em conflito. Revisões PostgreSQL usam a mesma transação e trava por documento entre processos. Clientes legados devem passar a enviar expectedRevision.
+
+Fila PostgreSQL persiste entrada, parciais, cursor, posse, lease e tentativas; worker na inicialização e a cada dois segundos. Testes em processos independentes comprovaram exclusão mútua, queda, retomada sem repetir parcial confirmado e cancelamento entre servidores. Modo por arquivos continua local, com retentativa manual. Armazenamento compartilhado dos originais ainda depende da integração/infraestrutura.
+
+Primeira entrega de avaliações: importação JSON e API, snapshots e resultados persistidos, idempotência, correção com omissões, métricas por estudante/questão/BNCC/descritor, filtros de escola/turma/período e comparação de duas aplicações. Metas/alertas e análise longitudinal ficam para a continuação. Contrato e exemplo fictício em AVALIACOES-E-INTEGRACAO.md e EXEMPLO-AVALIACAO.json.
+
+Validação local: 143 testes gerais, 141 aprovados, zero falhas, duas integrações opcionais separadas. PostgreSQL: quatro testes aprovados, incluindo três cenários adicionais. Lint/build dos dois projetos aprovados. Inventário: 55 arquivos de produção, 36 arquivos de teste/apoio, sem candidatos sem referência.
+
+Ensaio de navegador em banco temporário isolado: recuperação após recarga, salvamento/limpeza do rascunho, dashboard com 2 acertos/1 erro/3 omissões (33,33%), comparação, largura de 390 px sem transbordamento da página e reimportação idempotente pelo seletor de arquivos. Console sem erros capturados. Não houve teste com professores: protocolo preparado em PROTOCOLO-HOMOLOGACAO.md, execução humana pendente em #43.

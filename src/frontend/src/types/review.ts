@@ -1,4 +1,5 @@
 export type Question = {
+  revision?: string;
   id: string;
   number: number | null;
   text: string;
@@ -31,6 +32,7 @@ export type Question = {
 };
 
 export type ReviewUpdate = {
+  expectedRevision?: string;
   pageStart: number | null;
   pageEnd: number | null;
   visualReferences?: Question["visualReferences"];

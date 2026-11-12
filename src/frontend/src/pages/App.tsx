@@ -1,6 +1,6 @@
 import { classificationProgress } from "../utils/classification-progress.js";
 import type { Question, ReviewUpdate, UploadResult, Feedback, PedagogicalJob } from "../types/review.js";
-import { clearSavedDraft, createQuestionDraft } from "../utils/review-draft.js";
+import { clearSavedDraft, createQuestionDraft, draftStorageKey, serializeReviewDraft, parseReviewDraft, recoverableDrafts, type SavedReviewDraft } from "../utils/review-draft.js";
 import { PedagogyFields } from "../components/PedagogyFields.js";
 import { SiteHeader } from "../components/SiteHeader.js";
 import { VisualSourceEditor } from "../components/VisualSourceEditor.js";
@@ -89,6 +89,32 @@ function App({ active = true, onReviewChange }: { active?: boolean; onReviewChan
   const [showProcessingHint, setShowProcessingHint] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [questionDrafts, setQuestionDrafts] = useState<Record<string, ReviewUpdate>>({});
+  const [keepDrafts, setKeepDrafts] = useState(false);
+  const [savedDraft, setSavedDraft] = useState<SavedReviewDraft | null>(null);
+  const [draftWarning, setDraftWarning] = useState("");
+  const draftDocument = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const id = result?.origin.id;
+    if (!id || draftDocument.current === id) return;
+    draftDocument.current = id;
+    setKeepDrafts(false);
+    setQuestionDrafts({});
+    try {
+      const saved = parseReviewDraft(localStorage.getItem(draftStorageKey(id)), id);
+      setSavedDraft(saved);
+      if (!saved) localStorage.removeItem(draftStorageKey(id));
+    } catch { setDraftWarning("O navegador não permitiu consultar rascunhos locais."); }
+  }, [result?.origin.id]);
+  useEffect(() => {
+    const id = result?.origin.id;
+    if (!id || !keepDrafts || savedDraft) return;
+    try {
+      const content = serializeReviewDraft(id, questionDrafts);
+      if (content.length > 1000000) throw new Error("Limite local excedido");
+      if (Object.keys(questionDrafts).length) localStorage.setItem(draftStorageKey(id), content);
+      else localStorage.removeItem(draftStorageKey(id));
+    } catch { setDraftWarning("Não foi possível guardar o rascunho neste navegador. Salve a revisão no servidor."); }
+  }, [questionDrafts, keepDrafts, savedDraft, result?.origin.id]);
   const [savingQuestion, setSavingQuestion] = useState<string | null>(null);
   const [classification, setClassification] = useState<PedagogicalJob | null>(null);
   const [analysisAttempt, setAnalysisAttempt] = useState(0);
@@ -308,7 +334,11 @@ function App({ active = true, onReviewChange }: { active?: boolean; onReviewChan
               }
             : current,
         );
-      setQuestionDrafts((current) => clearSavedDraft(current, question.id, draft));
+      setQuestionDrafts((current) => {
+        const remaining = clearSavedDraft(current, question.id, draft);
+        const revision = payload.questions?.find(item => item.id === question.id)?.revision;
+        return remaining[question.id] && revision ? { ...remaining, [question.id]: { ...remaining[question.id]!, expectedRevision: revision } } : remaining;
+      });
       setFeedback({
         message:
           status === "approved"
@@ -334,6 +364,31 @@ function App({ active = true, onReviewChange }: { active?: boolean; onReviewChan
   return (
     <div className="page-shell">
       <SiteHeader />
+      {result && <section className="draft-recovery" aria-label="Rascunhos da revisão">
+        <label><input type="checkbox" checked={keepDrafts} onChange={event => {
+          setKeepDrafts(event.currentTarget.checked);
+          if (!event.currentTarget.checked && result.origin.id) {
+            try { localStorage.removeItem(draftStorageKey(result.origin.id)); setSavedDraft(null); }
+            catch { setDraftWarning("Não foi possível remover o rascunho local."); }
+          }
+        }} /> Guardar rascunhos neste navegador por até 7 dias</label>
+        <p>Use em um dispositivo pessoal. A aprovação só acontece ao salvar no servidor.</p>
+        {savedDraft && <div role="status">
+          <p>Existe um rascunho recuperável. Apenas questões cuja versão não mudou serão restauradas.</p>
+          <button type="button" disabled={!Object.keys(recoverableDrafts(savedDraft, result.questions)).length} onClick={() => {
+            setQuestionDrafts(recoverableDrafts(savedDraft, result.questions)); setKeepDrafts(true); setSavedDraft(null);
+          }}>Recuperar rascunho compatível</button>
+          <button type="button" onClick={() => {
+            const url = URL.createObjectURL(new Blob([JSON.stringify(savedDraft, null, 2)], { type: "application/json" }));
+            const link = document.createElement("a"); link.href = url; link.download = "rascunho-revisao.json"; link.click(); URL.revokeObjectURL(url);
+          }}>Baixar rascunho para conciliar</button>
+          <button type="button" onClick={() => {
+            try { localStorage.removeItem(draftStorageKey(savedDraft.documentId)); setSavedDraft(null); }
+            catch { setDraftWarning("Não foi possível descartar o rascunho."); }
+          }}>Descartar rascunho</button>
+        </div>}
+        {draftWarning && <p role="alert">{draftWarning}</p>}
+      </section>}
 
       <main className={`hero-layout${result ? " has-review" : ""}`}>
         <section className="hero-copy" aria-labelledby="page-title">

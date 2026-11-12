@@ -2,6 +2,7 @@ import { syncQuestionBank } from "./question-bank.service.js";
 import type { PoolClient } from "pg";
 import type { ReviewQuestion, ReviewResult } from "./review-results.service.js";
 import { getDatabasePool } from "./database.service.js";
+import { documentTransaction } from "./document-transaction.js";
 
 async function insertReviewQuestion(
   client: PoolClient,
@@ -44,9 +45,10 @@ async function insertReviewQuestion(
 
 async function writeReviewResult(result: ReviewResult, insertOnly: boolean): Promise<boolean> {
   const pool = getDatabasePool();
-  const client = await pool.connect();
+  const transaction = documentTransaction.getStore();
+  const client = transaction?.client ?? await pool.connect();
   try {
-    await client.query("BEGIN");
+    if (!transaction) await client.query("BEGIN");
     const inserted = await client.query(
       `INSERT INTO extrator.review_documents (
         document_id, status, message, origin, processed_at, page_count,
@@ -80,7 +82,7 @@ async function writeReviewResult(result: ReviewResult, insertOnly: boolean): Pro
       ],
     );
     if (insertOnly && !inserted.rowCount) {
-      await client.query("COMMIT");
+      if (!transaction) await client.query("COMMIT");
       return false;
     }
 
@@ -89,13 +91,13 @@ async function writeReviewResult(result: ReviewResult, insertOnly: boolean): Pro
       await insertReviewQuestion(client, result.documentId, question, position);
     }
     await syncQuestionBank(client, result);
-    await client.query("COMMIT");
+    if (!transaction) await client.query("COMMIT");
     return true;
   } catch (error) {
-    await client.query("ROLLBACK");
+    if (!transaction) await client.query("ROLLBACK");
     throw error;
   } finally {
-    client.release();
+    if (!transaction) client.release();
   }
 }
 
@@ -109,6 +111,8 @@ async function importLegacyReviewResult(result: ReviewResult): Promise<boolean> 
 
 /** Read document, questions and alternatives from one consistent database snapshot. */
 async function getReviewResultFromDatabase(documentId: string): Promise<ReviewResult | undefined> {
+  const transaction = documentTransaction.getStore();
+  if (transaction) return readReviewSnapshot(transaction.client, documentId);
   const client = await getDatabasePool().connect();
   try {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");

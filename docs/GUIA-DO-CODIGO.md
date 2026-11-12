@@ -1,6 +1,6 @@
 # Guia do código do Mentary
 
-Referência técnica da implementação do extrator, revisada em 12/11/2026. Para instalar e executar, consulte o [README](../README.md); para requisitos e entregas, consulte a [auditoria das issues](AUDITORIA-ISSUES.md). Avaliações e dashboards de US13–US20 são backlog, não funcionalidades deste código.
+Referência técnica da implementação, revisada em 12/11/2026. Para instalar e executar, consulte o [README](../README.md); para requisitos e entregas, consulte a [auditoria das issues](AUDITORIA-ISSUES.md). A primeira entrega de avaliações, rascunhos duráveis e coordenação PostgreSQL está detalhada em [Avaliações e integração](AVALIACOES-E-INTEGRACAO.md). Login e autorização pertencem ao sistema principal, conforme decisão do responsável.
 
 ## 1. Arquitetura e pontos de entrada
 
@@ -109,7 +109,7 @@ Sem `DATABASE_URL`, a revisão pode usar arquivos; o banco de questões exige Po
 - Funções públicas que adquirem o bloqueio chamam variantes internas `...Unlocked` quando necessário. Não readquirir o mesmo bloqueio de dentro dele: não é um mutex reentrante.
 - `postgres-review.service.ts` lê documento, questões e alternativas em transação `REPEATABLE READ READ ONLY`, evitando misturar versões de commits diferentes.
 - Gravação da revisão e sincronização do banco ocorrem na mesma transação PostgreSQL.
-- O bloqueio de aplicação é em memória. Não resolve duas instâncias nem conflitos de revisores com versões antigas do mesmo campo. Essa evolução está em #38.
+- Com PostgreSQL, `document-lock.service.ts` usa trava transacional entre processos e `document-transaction.ts` compartilha o cliente na leitura/alteração/publicação. O hash `revision` e o PATCH com `expectedRevision` detectam edição de versão antiga (409). Clientes antigos sem o campo precisam ser atualizados. O modo por arquivos continua limitado a uma instância.
 - A gravação atual substitui o conjunto de questões da revisão; otimizações futuras precisam manter atomicidade e publicação. Não chamar diretamente o gravador de baixo nível para editar uma revisão já existente sem a coordenação necessária.
 
 ## 6. Publicação e consulta
@@ -140,7 +140,7 @@ Uma questão é enviada por chamada. Timeout recebe uma nova tentativa; resultad
 
 O frontend preenche campos vazios e exige salvar. Mudanças relevantes sinalizam resultado desatualizado. Falha/cancelamento com sugestões mostra resultados parciais explicitamente.
 
-Após reinício, tarefa interrompida de outro processo é sinalizada como falha recuperável; não há retomada automática. Cancelar o fetch não garante descarregar imediatamente o modelo da GPU. Coordenação e recuperação distribuídas estão em #42.
+Com PostgreSQL, `durable-classification.service.ts` persiste tarefas e cursor, usa posse/lease e limita chamadas ao modelo entre servidores. O worker do `server.ts` retoma tarefas após expiração do lease e percebe cancelamentos persistidos. Sem PostgreSQL permanece a retentativa manual após reinício. Cancelar o fetch não garante descarregar imediatamente o modelo da GPU. Veja os detalhes e limites no guia de integração.
 
 ## 8. Retenção
 
@@ -207,7 +207,7 @@ Os erros tratados usam `{"error":"mensagem"}`. Ainda não há taxonomia de códi
 | `utils/api-response.ts` | Ler o corpo uma vez, tratar HTTP/JSON inválido e preservar erros da API. |
 | `utils/question-presentation.ts` | Textos de apresentação da questão objetiva. |
 
-Rascunhos sobrevivem à navegação interna na mesma aba; não sobrevivem necessariamente à recarga/fechamento. Recuperação durável está em #41. `App.tsx` ainda concentra estados e efeitos: futuras extrações devem preservar cancelamento e a regra de não apagar edições feitas durante um salvamento.
+Rascunhos sobrevivem à navegação interna na mesma aba. O usuário pode habilitar armazenamento local por sete dias e recuperar versões compatíveis após recarga/fechamento, baixar o conteúdo para conciliação ou descartá-lo. `App.tsx` ainda concentra estados e efeitos: futuras extrações devem preservar cancelamento e a regra de não apagar edições feitas durante um salvamento. Limpeza ao trocar de usuário depende da integração com o sistema principal.
 
 O Workspace mantém o endereço da revisão ativa, permitindo reabrir a versão salva após recarga. O campo BNCC mantém separadores durante a digitação e transforma o texto em lista; não eliminar a vírgula ao normalizar um campo controlado a cada tecla.
 

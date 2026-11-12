@@ -1,0 +1,79 @@
+{
+  "externalId": "aplicacao-ficticia-01",
+  "schoolId": "escola-ficticia",
+  "classId": "turma-ficticia-5a",
+  "title": "Avaliação fictícia de Matemática",
+  "appliedAt": "2026-11-12",
+  "questions": [
+    {
+      "id": "q1",
+      "prompt": "Quanto é 2 + 2?",
+      "alternatives": [
+        {
+          "label": "A",
+          "text": "3"
+        },
+        {
+          "label": "B",
+          "text": "4"
+        }
+      ],
+      "answerKey": "B",
+      "bnccSkills": [
+        "EF01MA01"
+      ],
+      "descriptor": "D1"
+    },
+    {
+      "id": "q2",
+      "prompt": "Quanto é 3 + 3?",
+      "alternatives": [
+        {
+          "label": "A",
+          "text": "6"
+        },
+        {
+          "label": "B",
+          "text": "7"
+        }
+      ],
+      "answerKey": "A",
+      "bnccSkills": [
+        "EF01MA01",
+        "EF01MA02"
+      ],
+      "descriptor": "D2"
+    }
+  ],
+  "students": [
+    {
+      "id": "estudante-ficticio-1",
+      "answers": {
+        "q1": {
+          "answer": "B",
+          "durationMs": 1000
+        },
+        "q2": {
+          "answer": "A",
+          "durationMs": 3000
+        }
+      }
+    },
+    {
+      "id": "estudante-ficticio-2",
+      "answers": {
+        "q1": {
+          "answer": "A"
+        },
+        "q2": {
+          "answer": null,
+          "durationMs": 0
+        }
+      }
+    },
+    {
+      "id": "estudante-ficticio-3",
+      "answers": {}
+    }
+  ]
+}

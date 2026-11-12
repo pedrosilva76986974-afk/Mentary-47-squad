@@ -1,5 +1,7 @@
 # Auditoria de issues — 11/11/2026
 
+Atualização de escopo em 12/11/2026: o responsável autorizou iniciar avaliações/dashboards e definiu identidade/autorização como responsabilidade do sistema principal (#40 fora deste módulo). A primeira entrega, a recuperação de rascunhos e a coordenação PostgreSQL estão em [Avaliações e integração](AVALIACOES-E-INTEGRACAO.md). As tabelas abaixo registram a auditoria anterior; o estado posterior das issues é registrado no GitHub. A homologação humana segue pendente, com [protocolo preparado](PROTOCOLO-HOMOLOGACAO.md).
+
 Escopo confirmado pelo responsável: concluir o extrator e cadastrar avaliações/dashboards como backlog futuro. A auditoria compara critérios das issues com código, testes e documentação; issue fechada não é, sozinha, evidência de implementação. As alterações ainda precisam ser revisadas e integradas.
 
 Continuação em 12/11/2026: a [revisão técnica do código](REVISAO-CODIGO.md) registra novos achados e as issues #36–#43. O [guia do código](GUIA-DO-CODIGO.md) documenta módulos, API, persistência, configuração e manutenção. As garantias de concorrência são para uma instância; o atendimento distribuído continua parcial em #38 e #42.

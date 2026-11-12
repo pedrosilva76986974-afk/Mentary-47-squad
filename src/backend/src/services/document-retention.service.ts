@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { removeDocumentOrigin, type DocumentOrigin } from "./document-origin.service.js";
 import { removeReviewResult } from "./review-results.service.js";
 import { withDocumentLock } from "./document-lock.service.js";
-import { classificationIsActive, removeClassification } from "./pedagogical-classification.service.js";
+import { classificationIsActiveAcrossServers, removeClassification } from "./pedagogical-classification.service.js";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const documentIdPattern = /^[\da-f-]{36}$/i;
@@ -50,7 +50,7 @@ async function cleanupExpiredDocuments(now = Date.now()): Promise<number> {
   let removed = 0;
   for (const id of new Set(expiredIds)) {
     removed += await withDocumentLock(id, async () => {
-      if (classificationIsActive(id)) return 0;
+      if (await classificationIsActiveAcrossServers(id)) return 0;
       if (isDatabaseConfigured()) {
         const protectedRows = await getDatabasePool().query(
           "SELECT 1 FROM banco.question_sources WHERE active AND document_id=$1 LIMIT 1",

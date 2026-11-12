@@ -1,5 +1,7 @@
 # Revisão técnica do código — 12/11/2026
 
+Continuação após esta auditoria: implementados rascunhos locais optativos, revisão com hash/409, transação PostgreSQL entre processos e fila pedagógica persistida com recuperação/cancelamento entre workers. Iniciado o módulo de avaliações. O [guia de integração](AVALIACOES-E-INTEGRACAO.md) descreve o estado posterior e suas limitações; a tabela histórica desta revisão não deve ser usada como inventário atual dessas entregas. O inventário posterior contém 55 arquivos de produção e 36 arquivos de teste/apoio.
+
 Escopo: extrator atual, documentação técnica, consistência de dados, código sem uso e cadastro de pendências. A revisão amplia a [auditoria das issues](AUDITORIA-ISSUES.md). O [guia do código](GUIA-DO-CODIGO.md) descreve o comportamento final. As entregas estão em revisão no PR #35; não foram integradas automaticamente à main.
 
 ## Achados e tratamento

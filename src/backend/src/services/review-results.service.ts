@@ -1,4 +1,6 @@
 import { regionMatchesQuestion } from "./question-regions.service.js";
+import { createHash } from "node:crypto";
+import { ReviewConflictError } from "./review-conflict.js";
 import { hasAlternativeLabelGaps } from "./question-alternatives.service.js";
 import { withDocumentLock } from "./document-lock.service.js";
 import { validateRegion } from "./source-preview.service.js";
@@ -19,6 +21,7 @@ import {
 } from "./postgres-review.service.js";
 
 type ReviewQuestion = ParsedQuestion & {
+  revision?: string;
   id: string;
   status: "pending_review" | "approved" | "rejected";
   answerKey?: string | null;
@@ -40,7 +43,7 @@ type ReviewQuestion = ParsedQuestion & {
 
 type ReviewQuestionUpdate = Partial<Pick<ReviewQuestion,
   "prompt" | "answerKey" | "alternatives" | "status" | "pedagogy" | "reviewedBy" | "pageStart" | "pageEnd" | "visualReferences"
->>;
+>> & { expectedRevision?: string };
 
 type PedagogyMetadata = NonNullable<ReviewQuestion["pedagogy"]>;
 
@@ -69,6 +72,12 @@ function reviewDirectory(): string {
   return process.env.MENTARY_REVIEW_DIRECTORY ?? resolve(process.cwd(), "uploads", "reviews");
 }
 
+function canonicalContent(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalContent);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).filter(([key, item]) => key !== "revision" && item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonicalContent(item)]));
+  return value;
+}
+
 function normalizeReviewResult(review: ReviewResult): ReviewResult {
   review.questions = review.questions.map((question) => {
     delete (question as ReviewQuestion & { answer?: unknown }).answer;
@@ -87,6 +96,7 @@ function normalizeReviewResult(review: ReviewResult): ReviewResult {
       missingComponents.add("answer");
     }
     question.missingComponents = [...missingComponents];
+    question.revision = createHash("sha256").update(JSON.stringify(canonicalContent({ id: question.id, prompt: question.prompt ?? question.text, alternatives: question.alternatives ?? [], answerKey: question.answerKey ?? null, pedagogy: question.pedagogy ?? {}, reviewedBy: question.reviewedBy ?? "", status: question.status, pageStart: question.pageStart, pageEnd: question.pageEnd, visualReferences: question.visualReferences ?? [] }))).digest("hex");
     return question;
   });
   return review;
@@ -136,6 +146,7 @@ async function saveReviewResult(
     questions,
   };
 
+  normalizeReviewResult(result);
   if (isDatabaseConfigured()) {
     await initializeDatabase();
     await saveReviewResultToDatabase(result);
@@ -192,6 +203,7 @@ async function updateReviewQuestionUnlocked(
   }
 
   const question = { ...review.questions[questionIndex]! };
+  if (update.expectedRevision !== undefined && update.expectedRevision !== question.revision) throw new ReviewConflictError();
   if ("pageStart" in update || "pageEnd" in update) {
     const start = update.pageStart, end = update.pageEnd;
     if (!(start === null && end === null) && (!Number.isInteger(start) || !Number.isInteger(end) || Number(start) < 1 || Number(end) < Number(start) || Number(end) > review.pages)) throw new DocumentValidationError("Informe as duas páginas válidas ou marque a página como desconhecida.");

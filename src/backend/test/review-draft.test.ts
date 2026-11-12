@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clearSavedDraft, createQuestionDraft } from "../../frontend/src/utils/review-draft.js";
+import { clearSavedDraft, createQuestionDraft, serializeReviewDraft, parseReviewDraft, recoverableDrafts } from "../../frontend/src/utils/review-draft.js";
 import type { Question } from "../../frontend/src/types/review.js";
 
 const question: Question = {
@@ -11,6 +11,19 @@ const question: Question = {
   pageEnd: null,
   status: "pending_review",
 };
+
+test("durable drafts recover only the same document and revision and expire after seven days", () => {
+  const savedQuestion = { ...question, id: "document-q1", revision: "revision-1" };
+  const draft = { ...createQuestionDraft(savedQuestion), prompt: "Edição ainda não salva" };
+  const raw = serializeReviewDraft("document", { [savedQuestion.id]: draft }, 1000);
+  const parsed = parseReviewDraft(raw, "document", 2000)!;
+  assert.deepEqual(recoverableDrafts(parsed, [savedQuestion]), JSON.parse(JSON.stringify({ [savedQuestion.id]: draft })));
+  assert.deepEqual(recoverableDrafts(parsed, [{ ...savedQuestion, revision: "revision-2" }]), {});
+  assert.equal(parseReviewDraft(raw, "other", 2000), null);
+  assert.equal(parseReviewDraft(raw, "document", 1000 + 7 * 86400000), null);
+  assert.equal(parseReviewDraft("{", "document"), null);
+  assert.equal(parseReviewDraft(JSON.stringify({ ...parsed, drafts: { foreign: draft } }), "document", 2000), null);
+});
 
 test("a delayed save response keeps edits made after the request and other question drafts", () => {
   const sent = createQuestionDraft(question);

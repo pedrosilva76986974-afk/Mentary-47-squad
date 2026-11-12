@@ -225,3 +225,14 @@ O workflow .github/workflows/ci.yml executa lint, builds, testes gerais, Postgre
 - [Auditoria das issues e backlog de avaliações](docs/AUDITORIA-ISSUES.md)
 - [Guia do código: módulos, API e manutenção](docs/GUIA-DO-CODIGO.md)
 - [Revisão técnica e pendências](docs/REVISAO-CODIGO.md)
+- [Avaliações, dashboards e contrato de integração](docs/AVALIACOES-E-INTEGRACAO.md)
+- [Exemplo fictício de aplicação](docs/EXEMPLO-AVALIACAO.json)
+- [Protocolo de homologação com professores](docs/PROTOCOLO-HOMOLOGACAO.md)
+
+## Avaliações e recuperação de trabalho
+
+O menu **AVALIAÇÕES** recebe aplicações em JSON e apresenta correção, indicadores por estudante/questão/BNCC/descritor, filtros e comparação de duas aplicações. Exige PostgreSQL. Os dados de exemplo não são cadastrados automaticamente. Login e permissões serão fornecidos pelo sistema principal.
+
+Na revisão, habilite **Guardar rascunhos neste navegador por até 7 dias** para oferecer recuperação após recarga. Questões alteradas em outra sessão geram conflito de versão; a versão antiga não é restaurada automaticamente.
+
+Com PostgreSQL, a fila da IA passa a persistir tarefas e retomar trabalho após queda do servidor. A migração 008 é aplicada na inicialização. Consulte o guia de integração para os limites do modo por arquivos e os requisitos de armazenamento dos documentos entre servidores.
