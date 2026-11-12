@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
@@ -235,6 +235,54 @@ test("approved questions cannot lose required fields through a partial update", 
   assert.equal(reopened.status, 200);
   assert.equal(reopened.body.questions[0].status, "pending_review");
   assert.ok(reopened.body.questions[0].missingComponents.includes("answer"));
+});
+
+test("incomplete alternative warnings stay consistent between save and reopening a review", async () => {
+  const upload = await request(app).post("/documents")
+    .attach("document", await createPdf("Questão 1: Quanto é 2 + 2? A) 3 B) 4"), {
+      filename: "incomplete-review.pdf", contentType: "application/pdf",
+    });
+  assert.equal(upload.status, 200);
+  const url = `${upload.body.reviewUrl}/questions/${upload.body.questions[0].id}`;
+  for (const alternatives of [
+    [{ label: "A", text: "3" }, { label: "B", text: " " }],
+    [{ label: "A", text: "3" }, { label: "a", text: "4" }],
+    [{ label: " ", text: "3" }, { label: "B", text: "4" }],
+  ]) {
+    const saved = await request(app).patch(url).send({ alternatives, status: "pending_review" });
+    assert.equal(saved.status, 200);
+    assert.ok(saved.body.questions[0].missingComponents.includes("alternatives"));
+    const reopened = await request(app).get(upload.body.reviewUrl);
+    assert.deepEqual(saved.body.questions[0].missingComponents, reopened.body.questions[0].missingComponents);
+  }
+  const fixed = await request(app).patch(url).send({
+    alternatives: [{ label: "A", text: "3" }, { label: "B", text: "4" }], answerKey: "B",
+  });
+  assert.equal(fixed.status, 200);
+  assert.deepEqual(fixed.body.questions[0].missingComponents, []);
+});
+
+test("saving unrelated review fields preserves visual warnings until the crop is confirmed", async () => {
+  const upload = await request(app).post("/documents")
+    .attach("document", await createPdf("Questão 1: Quanto é 2 + 2? A) 3 B) 4"), {
+      filename: "visual-warning.pdf", contentType: "application/pdf",
+    });
+  assert.equal(upload.status, 200);
+  const review = await getReviewResult(upload.body.origin.id);
+  assert.ok(review);
+  review.questions[0]!.visualReferences = [{ page: 1, kind: "graphic", association: "unconfirmed", extractionWarning: "Confira o original." }];
+  await writeFile(join(testDirectory, "reviews", `${review.documentId}.json`), JSON.stringify(review));
+  const url = `${upload.body.reviewUrl}/questions/${review.questions[0]!.id}`;
+  const saved = await request(app).patch(url).send({ reviewedBy: "Docente", visualReferences: review.questions[0]!.visualReferences });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.questions[0].visualReferences[0].extractionWarning, "Confira o original.");
+  assert.equal(saved.body.questions[0].visualReferences[0].association, "unconfirmed");
+  const confirmed = await request(app).patch(url).send({ visualReferences: [{
+    page: 1, kind: "graphic", association: "manual", region: { x: 0, y: 0, width: 1, height: 1 },
+  }] });
+  assert.equal(confirmed.status, 200);
+  assert.equal(confirmed.body.questions[0].visualReferences[0].association, "manual");
+  assert.equal(confirmed.body.questions[0].visualReferences[0].extractionWarning, undefined);
 });
 
 test("POST /documents rejects unsupported file types", async () => {
@@ -652,3 +700,4 @@ test("question parser recognizes an implementation task and keeps numbered obser
   assert.match(questions[0]?.text ?? "", /public void adiciona/);
   assert.match(questions[0]?.text ?? "", /Observações/);
 });
+

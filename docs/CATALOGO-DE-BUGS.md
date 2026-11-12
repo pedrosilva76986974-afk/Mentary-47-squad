@@ -22,6 +22,17 @@ Os casos abaixo foram simulados com dados sintéticos e possuem verificações r
 
 ## Como reproduzir
 
+Regressões acrescentadas na auditoria de 11/11/2026:
+
+| ID | Reprodução | Resultado esperado | Evidência |
+| --- | --- | --- | --- |
+| VISUAL-03 | Alterar a página do primeiro recorte com outras referências vinculadas | Mostrar a nova referência primeiro, preservando secundárias sem duplicar a página | source-editing.test.ts |
+| VISUAL-04 | Inspeção de imagem corrompida em página com texto legível | Gerar aviso e continuar; cancelamento deve continuar interrompendo | visual-detection.test.ts |
+| VISUAL-05 | Salvar responsável sem confirmar referência visual incerta | Preservar aviso e associação; limpar somente ao confirmar recorte | documents.test.ts |
+| REVISAO-01 | Salvar alternativas vazias ou com rótulos duplicados como pendente | Aviso idêntico na resposta e após reabrir | documents.test.ts |
+| REVISAO-02 | Editar novamente enquanto o salvamento anterior está em andamento | Resposta anterior não apaga o rascunho mais recente | review-draft.test.ts |
+| IA-03 | Cancelar ou falhar depois de uma questão classificada | Identificar resultados como parciais preservados | classification-progress.test.ts |
+
 No backend: npm test; npm run test:postgres; npm run test:ocr. A integração PostgreSQL cria uma base com nome aleatório e remove apenas essa base. Não executa reset no banco da aplicação.
 
 ## Limites conhecidos
@@ -31,3 +42,4 @@ No backend: npm test; npm run test:postgres; npm run test:ocr. A integração Po
 - O banco deduplica representação textual normalizada, não paráfrases nem equivalência matemática geral.
 - Classificação pedagógica continua sujeita à revisão docente; a meta de 15 segundos não é SLA universal.
 - Homologação com professores reais permanece uma etapa humana; não foi simulada como se tivesse ocorrido.
+

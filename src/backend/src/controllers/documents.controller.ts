@@ -1,20 +1,38 @@
 import { getDatabasePool, isDatabaseConfigured } from "../services/database.service.js";
 import type { Request, Response, NextFunction } from "express";
 import { extractDocument } from "../services/document-extraction.service.js";
-import { getStoredDocument, recordDocumentOrigin, removeDocumentOrigin } from "../services/document-origin.service.js";
+import {
+  getStoredDocument,
+  recordDocumentOrigin,
+  removeDocumentOrigin,
+} from "../services/document-origin.service.js";
 import { validateDocument } from "../services/document-validation.service.js";
 import { identifyQuestionsDetailed } from "../services/question-identification.service.js";
-import { getReviewResult, saveReviewResult, removeReviewResult, updateReviewQuestion, type ReviewResult } from "../services/review-results.service.js";
+import {
+  getReviewResult,
+  saveReviewResult,
+  removeReviewResult,
+  updateReviewQuestion,
+  type ReviewResult,
+} from "../services/review-results.service.js";
+
+function routeParameter(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
+}
 
 async function uploadAndExtract(req: Request, res: Response, next: NextFunction): Promise<void> {
   const file = req.file;
   if (!file) {
-    res.status(400).json({ error: "Envie um arquivo PDF, PNG, JPG ou JPEG no campo 'document'." });
+    res.status(400).json({
+      error: "Envie um arquivo PDF, PNG, JPG ou JPEG no campo 'document'.",
+    });
     return;
   }
 
   const cancellation = new AbortController();
-  const onClose = () => { if (!res.writableEnded) cancellation.abort(); };
+  const onClose = () => {
+    if (!res.writableEnded) cancellation.abort();
+  };
   res.on("close", onClose);
   let createdId: string | undefined;
   try {
@@ -59,8 +77,12 @@ async function uploadAndExtract(req: Request, res: Response, next: NextFunction)
   } catch (error) {
     if (cancellation.signal.aborted) {
       if (createdId) {
-        await removeReviewResult(createdId).catch(e => console.error("Falha ao desfazer revisão cancelada.", e));
-        await removeDocumentOrigin(createdId).catch(e => console.error("Falha ao desfazer origem cancelada.", e));
+        await removeReviewResult(createdId).catch((e) =>
+          console.error("Falha ao desfazer revisão cancelada.", e),
+        );
+        await removeDocumentOrigin(createdId).catch((e) =>
+          console.error("Falha ao desfazer origem cancelada.", e),
+        );
       }
       return;
     }
@@ -72,14 +94,19 @@ async function uploadAndExtract(req: Request, res: Response, next: NextFunction)
 
 async function withPublication(review: ReviewResult) {
   if (!isDatabaseConfigured()) return review;
-  const rows = await getDatabasePool().query("SELECT review_question_id FROM banco.question_sources WHERE document_id=$1 AND active",[review.documentId]);
-  return { ...review, publishedQuestionIds: rows.rows.map(row=>String(row.review_question_id)) };
+  const rows = await getDatabasePool().query(
+    "SELECT review_question_id FROM banco.question_sources WHERE document_id=$1 AND active",
+    [review.documentId],
+  );
+  return {
+    ...review,
+    publishedQuestionIds: rows.rows.map((row) => String(row.review_question_id)),
+  };
 }
 
 async function getDocumentReview(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const parameter = req.params.documentId;
-    const documentId = Array.isArray(parameter) ? parameter[0] ?? "" : parameter ?? "";
+    const documentId = routeParameter(req.params.documentId);
     const review = await getReviewResult(documentId);
     if (!review) {
       res.status(404).json({ error: "Resultado de revisão não encontrado." });
@@ -93,10 +120,8 @@ async function getDocumentReview(req: Request, res: Response, next: NextFunction
 
 async function updateDocumentReviewQuestion(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const documentParameter = req.params.documentId;
-    const questionParameter = req.params.questionId;
-    const documentId = Array.isArray(documentParameter) ? documentParameter[0] ?? "" : documentParameter ?? "";
-    const questionId = Array.isArray(questionParameter) ? questionParameter[0] ?? "" : questionParameter ?? "";
+    const documentId = routeParameter(req.params.documentId);
+    const questionId = routeParameter(req.params.questionId);
     const review = await updateReviewQuestion(documentId, questionId, req.body);
     if (!review) {
       res.status(404).json({ error: "Questão ou registro de revisão não encontrado." });
@@ -110,8 +135,7 @@ async function updateDocumentReviewQuestion(req: Request, res: Response, next: N
 
 async function getDocumentSource(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const parameter = req.params.documentId;
-    const documentId = Array.isArray(parameter) ? parameter[0] ?? "" : parameter ?? "";
+    const documentId = routeParameter(req.params.documentId);
     const document = await getStoredDocument(documentId);
     if (!document) {
       res.status(404).json({ error: "Documento original não encontrado ou expirado." });
@@ -124,3 +148,4 @@ async function getDocumentSource(req: Request, res: Response, next: NextFunction
 }
 
 export { getDocumentReview, getDocumentSource, updateDocumentReviewQuestion, uploadAndExtract };
+

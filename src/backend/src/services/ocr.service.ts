@@ -94,6 +94,6 @@ async function recognizeImageWithLayout(image: Buffer, signal?: AbortSignal): Pr
   } finally { signal?.removeEventListener("abort", cancel); }
 }
 
-async function recognizeImage(image: Buffer, signal?: AbortSignal): Promise<string> { return (await recognizeImageWithLayout(image, signal)).text; }
 async function closeOcrWorker(): Promise<void> { const current = workerPromise; workerPromise = undefined; if(current) await (await current).terminate(); }
-export { closeOcrWorker, orderOcrBlocks, prepareImageForOcr, recognizeImage, recognizeImageWithLayout };
+export { closeOcrWorker, orderOcrBlocks, prepareImageForOcr, recognizeImageWithLayout };
+

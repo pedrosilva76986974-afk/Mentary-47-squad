@@ -1,3 +1,7 @@
+# Histórico de implementação
+
+O estado consolidado das issues está em [AUDITORIA-ISSUES.md](AUDITORIA-ISSUES.md). Os registros abaixo são históricos; pendências antigas podem ter sido substituídas pelas entregas posteriores.
+
 ## Banco próprio e seis frentes — 07/11/2026
 
 A dependência do banco externo Mentary foi retirada do fluxo de publicação. As migrations 005–007 criam banco.questions e banco.question_sources no PostgreSQL local, mantendo extrator para revisão e o legado intacto. Aprovar publica na mesma transação; pendentes/rejeitadas não aparecem na consulta. Reabrir retira aquela origem ativa. Duplicatas exatas normalizadas compartilham a questão e preservam todas as origens. Equivalência semântica, paráfrases e alternativas reordenadas ainda exigem conferência humana. O bloqueio histórico da #17 descrito abaixo foi substituído por esta implementação autorizada de banco próprio.
@@ -222,3 +226,22 @@ Os links Enviar material e Banco de questões agora usam navegação interna. O 
 Validado em navegador com mentary-navegacao-simulado.pdf: selecionar arquivo, ir ao banco e retornar; enviar e sair durante a requisição; voltar à revisão com questão, alternativas e gabarito; editar responsável sem salvar, navegar ao banco e voltar pelo histórico, preservando rascunho e aviso de alterações. A classificação concluiu e preencheu os campos durante o ensaio. Lint e build frontend passaram. Não houve edição de documentos do usuário nem participantes humanos.
 
 Escopo: preservação durante a navegação interna na mesma aba. Recarregar a página, fechar a aba ou abrir links diretos continua iniciando outra instância; rascunhos não salvos não são persistidos em banco por esta alteração.
+
+## 11/11/2026 — Auditoria das issues e fechamento das lacunas do extrator
+
+Comparadas as 22 issues existentes com código, testes e histórias. US13–US20 não tinham issues: cadastradas como #27–#34, com critérios, prioridades e dependências. Por decisão do responsável, avaliações e dashboards permanecem no backlog; não foram implementados neste ciclo. Numeração documental padronizada em US.
+
+Correções implementadas:
+
+- A troca da página do recorte substitui a referência principal e mantém referências secundárias; coordenadas não finitas são rejeitadas antes do envio.
+- Falha de inspeção visual em PDF gera aviso persistido por página e preserva texto legível. O cancelamento continua sendo propagado. Salvar outros campos não converte uma associação incerta em manual nem remove seu aviso; confirmar o recorte resolve o aviso.
+- A mesma normalização de componentes incompletos é usada ao salvar e consultar uma revisão.
+- Salvamento mantém edições feitas durante a requisição; somente o rascunho efetivamente salvo é limpo.
+- Mudança da seleção limpa sua prévia; consulta/exportação não concorrem na tela, e sair do banco cancela a requisição pendente.
+- Classificação cancelada ou falha mostra explicitamente a quantidade de resultados parciais preservados.
+- Incluída a limpeza e separação de responsabilidades iniciada no ciclo anterior: tipos de revisão, campos pedagógicos, rascunhos, nomes da fila e remoção de código sem chamadas/arquivos vazios.
+
+Validação local: lint e builds dos dois projetos passaram. Suíte geral: 125 testes, 123 passaram, zero falhas e duas integrações opcionais desativadas. PostgreSQL real e OCR real são conferidos separadamente na execução remota da entrega. Não houve nova homologação com participantes humanos nem medição nova do desempenho pedagógico do modelo.
+
+Configurações administrativas: proteção da main não pôde ser consultada (HTTP 403); Projects não pôde ser administrado com as ferramentas da integração. Esses pontos não foram marcados como concluídos pela auditoria. Nenhum estado de issue foi alterado para encerrar trabalho ainda não integrado.
+

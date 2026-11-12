@@ -135,6 +135,24 @@ h2 { margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -0.4px; }
 .submit-button:hover:not(:disabled) { transform: translateY(-1px); background: #2afa5d; box-shadow: 0 8px 24px rgb(18 232 71 / 25%); }
 .submit-button:disabled { background: #d9d8e2; color: #777487; cursor: not-allowed; }
 .submit-button span { font-size: 20px; line-height: 0.7; }
+.cancel-upload-button {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 12px 16px;
+  border: 1px solid #cfc4e8;
+  border-radius: 9px;
+  background: #fff;
+  color: #503894;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.cancel-upload-button:hover { background: #f5f2fb; border-color: #987dc9; }
+.cancel-upload-button:active { background: #ede8f6; }
 .processing-hint { margin: 12px 2px 0; color: #716c83; font-size: 12px; line-height: 1.55; }
 .feedback { margin-top: 14px; padding: 12px 13px; border-radius: 9px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .feedback.success { background: #e9f9ec; color: #246b33; }
@@ -198,8 +216,6 @@ h2 { margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -0.4px; }
 .source-preview { margin-top: 19px; color: white; }
 .source-preview summary { width: fit-content; color: var(--electric-blue); cursor: pointer; font-size: 12px; font-weight: 700; }
 .source-preview pre { max-height: 300px; overflow: auto; margin: 12px 0 0; padding: 16px; border-radius: 10px; background: rgb(18 12 58 / 38%); color: rgb(255 255 255 / 82%); font: 12px/1.6 "Segoe UI", sans-serif; white-space: pre-wrap; overflow-wrap: anywhere; }
-.review-record-link { display: inline-block; margin-top: 20px; color: var(--electric-blue); font-size: 11px; font-weight: 700; text-decoration: none; }
-.review-record-link:hover { text-decoration: underline; }
 
 footer { display: flex; min-height: 62px; align-items: center; justify-content: center; gap: 12px; border-top: 1px solid rgb(255 255 255 / 12%); color: rgb(255 255 255 / 48%); font-size: 9px; font-weight: 700; letter-spacing: 1.2px; }
 footer span { color: var(--electric-blue); font-size: 11px; font-weight: 900; }
@@ -293,9 +309,8 @@ footer span { color: var(--electric-blue); font-size: 11px; font-weight: 900; }
 .question-actions button:nth-child(3) { background:#267343; color:white; }
 .question-actions button:nth-child(4) { background:#fff; color:#963c4d; border:1px solid #dbb9c0; }
 .has-review .source-preview { padding:0 32px 16px; color:#55446f; }
-.has-review .source-preview summary, .has-review .review-record-link { color:#51348e; }
+.has-review .source-preview summary { color:#51348e; }
 .has-review .source-preview pre { background:#eeeaf5; color:#3e3355; }
-.has-review .review-record-link { margin:0 32px 24px; }
 .has-review .no-questions { margin:24px; background:#fff; color:#514965; border-color:#e0d9ec; }
 @media(max-width:1000px) { .question-columns { grid-template-columns:minmax(0,1fr); } .question-inspector { border-left:0; border-top:1px solid #e6e0ed; } .question-inspector .pedagogy-fields { grid-template-columns:1fr 1fr; } }
 @media(max-width:600px) {
@@ -352,3 +367,4 @@ footer span { color: var(--electric-blue); font-size: 11px; font-weight: 900; }
 .question-source img { max-width:100%; height:auto; }
 @media(max-width:700px) { .bank-panel { padding:18px; margin-top:20px; } .bank-filters { grid-template-columns:1fr; } .source-crop-fields { grid-template-columns:1fr; } .bank-question { padding:14px; } .topbar { flex-wrap:wrap; gap:16px; } }
 .bank-visual { max-width:100%; height:auto; border:1px solid #eee8f5; border-radius:8px; }
+

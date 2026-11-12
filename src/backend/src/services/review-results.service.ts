@@ -105,7 +105,7 @@ async function saveReviewResult(
   const questions: ReviewQuestion[] = parsedQuestions.map((question, index) => {
     const visualReferences = findQuestionVisualReferences(question, extraction.visualPages).map(reference => {
       const regions = matchedRegions.filter(region => region.page === reference.page && regionMatchesQuestion(region, question));
-      if (regions.length !== 1) return { ...reference, association: "unconfirmed" as const };
+      if (regions.length !== 1 || reference.extractionWarning) return { ...reference, association: "unconfirmed" as const };
       const current = regions[0]!;
       const next = matchedRegions.filter(candidate => candidate.page === current.page && candidate.region.x === current.region.x && candidate.region.y > current.region.y + .005).sort((a,b)=>a.region.y-b.region.y)[0];
       return { ...reference, region: { ...current.region, height: (next?.region.y ?? 1) - current.region.y }, association: "automatic" as const };
@@ -191,7 +191,14 @@ async function updateReviewQuestion(
     question.visualReferences = update.visualReferences.map(value => {
       if (!value || !Number.isInteger(value.page) || value.page < 1 || value.page > review.pages || !["image","graphic"].includes(value.kind)) throw new DocumentValidationError("Página do elemento visual inválida.");
       if (value.region) validateRegion(value.region);
-      return { page: value.page, kind: value.kind, ...(value.region ? { region: value.region } : {}), association: "manual" as const };
+      const original = question.visualReferences?.find(reference => reference.page === value.page
+        && reference.kind === value.kind && JSON.stringify(reference.region ?? null) === JSON.stringify(value.region ?? null));
+      const confirmed = value.association === "manual" && Boolean(value.region);
+      return {
+        page: value.page, kind: value.kind, ...(value.region ? { region: value.region } : {}),
+        association: confirmed || !original ? "manual" as const : original.association ?? "unconfirmed" as const,
+        ...(!confirmed && original?.extractionWarning ? { extractionWarning: original.extractionWarning } : {}),
+      };
     });
   }
 
@@ -279,19 +286,8 @@ async function updateReviewQuestion(
     question.pedagogy = pedagogy;
   }
 
-  const missingComponents = new Set(question.missingComponents ?? []);
-  if (question.prompt?.trim()) missingComponents.delete("prompt");
-  else missingComponents.add("prompt");
-  if ((question.alternatives?.length ?? 0) < 2) missingComponents.add("alternatives");
-  else missingComponents.delete("alternatives");
-  const normalizedAnswerKey = question.answerKey?.trim().toLocaleUpperCase("pt-BR");
-  const hasValidAnswerKey = Boolean(normalizedAnswerKey
-    && question.alternatives?.some((alternative) => alternative.label.trim().toLocaleUpperCase("pt-BR") === normalizedAnswerKey));
-  if (hasValidAnswerKey) missingComponents.delete("answer");
-  else missingComponents.add("answer");
-  question.missingComponents = [...missingComponents];
-
   review.questions[questionIndex] = question;
+  normalizeReviewResult(review);
   if (isDatabaseConfigured()) {
     await saveReviewResultToDatabase(review);
   } else {
@@ -331,3 +327,4 @@ async function removeReviewResult(documentId: string): Promise<void> {
 
 export { findQuestionVisualReferences, getReviewResult, migrateLegacyReviewFiles, removeReviewResult, saveReviewResult, updateReviewQuestion };
 export type { ReviewQuestion, ReviewQuestionUpdate, ReviewResult };
+

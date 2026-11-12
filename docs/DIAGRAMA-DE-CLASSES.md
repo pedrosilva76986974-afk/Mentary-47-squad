@@ -41,6 +41,7 @@ classDiagram
     +string kind
     +string association
     +Region region
+    +OptionalString extractionWarning
   }
   class Region {
     +number x
@@ -111,3 +112,4 @@ sequenceDiagram
   API->>PostgreSQL: Consultar somente origens ativas aprovadas
   API-->>UI: Resultados paginados
 ```
+
