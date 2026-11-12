@@ -285,6 +285,25 @@ test("saving unrelated review fields preserves visual warnings until the crop is
   assert.equal(confirmed.body.questions[0].visualReferences[0].extractionWarning, undefined);
 });
 
+test("simultaneous edits to separate questions preserve both changes in the same document", async () => {
+  const upload = await request(app).post("/documents")
+    .attach("document", await createPdf("Questão 1: Quanto é 2 + 2? A) 3 B) 4 Questão 2: Quanto é 3 + 3? A) 5 B) 6"), {
+      filename: "concurrent-review.pdf", contentType: "application/pdf",
+    });
+  assert.equal(upload.status, 200);
+  assert.equal(upload.body.questions.length, 2);
+  const [first, second] = upload.body.questions;
+  const responses = await Promise.all([
+    request(app).patch(`${upload.body.reviewUrl}/questions/${first.id}`).send({ prompt: "Primeira questão revisada?" }),
+    request(app).patch(`${upload.body.reviewUrl}/questions/${second.id}`).send({ prompt: "Segunda questão revisada?" }),
+  ]);
+  assert.deepEqual(responses.map(response => response.status), [200, 200]);
+  const reopened = await request(app).get(upload.body.reviewUrl);
+  assert.deepEqual(reopened.body.questions.map((question: { prompt: string }) => question.prompt), [
+    "Primeira questão revisada?", "Segunda questão revisada?",
+  ]);
+});
+
 test("POST /documents rejects unsupported file types", async () => {
   const originCount = JSON.parse(await readFile(registryPath, "utf8")).length as number;
   const response = await request(app)

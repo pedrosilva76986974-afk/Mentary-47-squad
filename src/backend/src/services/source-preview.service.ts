@@ -1,4 +1,5 @@
 import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { assertRenderSize } from "./canvas-limits.service.js";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { standardFontDataUrl } from "./pdf-config.js";
 import { DocumentValidationError } from "./document-validation.service.js";
@@ -25,6 +26,7 @@ export async function renderSourcePreview(content: Buffer, mimeType: string, pag
     const source = await document.getPage(page);
     const unit = source.getViewport({ scale: 1 });
     const viewport = source.getViewport({ scale: Math.min(2, 1600 / Math.max(unit.width * region.width, unit.height * region.height)) });
+    assertRenderSize(Math.ceil(viewport.width), Math.ceil(viewport.height));
     const full = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
     await source.render({ canvas: full as never, canvasContext: full.getContext("2d") as never, viewport }).promise;
     const cropped = createCanvas(Math.max(1, Math.ceil(full.width * region.width)), Math.max(1, Math.ceil(full.height * region.height)));

@@ -16,6 +16,15 @@ app.use("/documents", documentsRouter);
 app.use("/questions", questionBankRouter);
 app.use(express.static(frontendPath));
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const bodyError = error as { type?: string } | null;
+  if (bodyError?.type === "entity.parse.failed") {
+    res.status(400).json({ error: "O corpo da requisição deve conter JSON válido." });
+    return;
+  }
+  if (bodyError?.type === "entity.too.large") {
+    res.status(413).json({ error: "O corpo JSON excede o limite de 100 KB." });
+    return;
+  }
   if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
     res.status(413).json({ error: "O arquivo excede o limite de 20 MB." });
     return;

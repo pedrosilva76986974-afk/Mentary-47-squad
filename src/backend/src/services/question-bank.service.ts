@@ -102,7 +102,7 @@ export async function publishExistingApprovedQuestions(): Promise<number> {
   }
   return count;
 }
-export type BankFilters = {
+type BankFilters = {
   q?: string;
   discipline?: string;
   grade?: string;

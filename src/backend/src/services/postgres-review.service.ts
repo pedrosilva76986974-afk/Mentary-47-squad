@@ -3,7 +3,12 @@ import type { PoolClient } from "pg";
 import type { ReviewQuestion, ReviewResult } from "./review-results.service.js";
 import { getDatabasePool } from "./database.service.js";
 
-async function insertReviewQuestion(client: PoolClient, documentId: string, question: ReviewQuestion, position: number): Promise<void> {
+async function insertReviewQuestion(
+  client: PoolClient,
+  documentId: string,
+  question: ReviewQuestion,
+  position: number,
+): Promise<void> {
   await client.query(
     `INSERT INTO extrator.review_questions (
       question_id, document_id, position, question_number, source_text, prompt, answer_key,
@@ -11,9 +16,20 @@ async function insertReviewQuestion(client: PoolClient, documentId: string, ques
       pedagogy, reviewed_by, visual_references
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'multiple_choice', $8, $9, $10, $11, $12, $13, $14, $15)`,
     [
-      question.id, documentId, position, question.number, question.text, question.prompt ?? null,
-      question.answerKey ?? null, question.missingComponents ?? [], question.pageStart, question.pageEnd,
-      question.confidence, question.status, question.pedagogy ?? null, question.reviewedBy ?? null,
+      question.id,
+      documentId,
+      position,
+      question.number,
+      question.text,
+      question.prompt ?? null,
+      question.answerKey ?? null,
+      question.missingComponents ?? [],
+      question.pageStart,
+      question.pageEnd,
+      question.confidence,
+      question.status,
+      question.pedagogy ?? null,
+      question.reviewedBy ?? null,
       JSON.stringify(question.visualReferences ?? []),
     ],
   );
@@ -36,7 +52,10 @@ async function writeReviewResult(result: ReviewResult, insertOnly: boolean): Pro
         document_id, status, message, origin, processed_at, page_count,
         extraction_method, source_text, identification
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT (document_id) ${insertOnly ? "DO NOTHING" : `DO UPDATE SET
+      ON CONFLICT (document_id) ${
+        insertOnly
+          ? "DO NOTHING"
+          : `DO UPDATE SET
         status = EXCLUDED.status,
         message = EXCLUDED.message,
         origin = EXCLUDED.origin,
@@ -45,11 +64,19 @@ async function writeReviewResult(result: ReviewResult, insertOnly: boolean): Pro
         extraction_method = EXCLUDED.extraction_method,
         source_text = EXCLUDED.source_text,
         identification = EXCLUDED.identification,
-        updated_at = now()`}
+        updated_at = now()`
+      }
       RETURNING document_id`,
       [
-        result.documentId, result.status, result.message, JSON.stringify(result.origin), result.processedAt,
-        result.pages, result.method, result.sourceText, JSON.stringify(result.identification ?? null),
+        result.documentId,
+        result.status,
+        result.message,
+        JSON.stringify(result.origin),
+        result.processedAt,
+        result.pages,
+        result.method,
+        result.sourceText,
+        JSON.stringify(result.identification ?? null),
       ],
     );
     if (insertOnly && !inserted.rowCount) {
@@ -80,23 +107,43 @@ async function importLegacyReviewResult(result: ReviewResult): Promise<boolean> 
   return writeReviewResult(result, true);
 }
 
+/** Read document, questions and alternatives from one consistent database snapshot. */
 async function getReviewResultFromDatabase(documentId: string): Promise<ReviewResult | undefined> {
-  const pool = getDatabasePool();
-  const documentResponse = await pool.query("SELECT * FROM extrator.review_documents WHERE document_id = $1", [documentId]);
+  const client = await getDatabasePool().connect();
+  try {
+    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    const review = await readReviewSnapshot(client, documentId);
+    await client.query("COMMIT");
+    return review;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function readReviewSnapshot(client: PoolClient, documentId: string): Promise<ReviewResult | undefined> {
+  const documentResponse = await client.query(
+    "SELECT * FROM extrator.review_documents WHERE document_id = $1",
+    [documentId],
+  );
   const document = documentResponse.rows[0] as Record<string, unknown> | undefined;
   if (!document) return undefined;
 
-  const questionResponse = await pool.query(
+  const questionResponse = await client.query(
     "SELECT * FROM extrator.review_questions WHERE document_id = $1 ORDER BY position",
     [documentId],
   );
   const questionRows = questionResponse.rows as Array<Record<string, unknown>>;
   const questionIds = questionRows.map((question) => String(question.question_id));
   const alternativeRows = questionIds.length
-    ? (await pool.query(
-        "SELECT question_id, label, choice_text FROM extrator.question_alternatives WHERE question_id = ANY($1::text[]) ORDER BY question_id, position",
-      [questionIds],
-    )).rows as Array<Record<string, unknown>>
+    ? ((
+        await client.query(
+          "SELECT question_id, label, choice_text FROM extrator.question_alternatives WHERE question_id = ANY($1::text[]) ORDER BY question_id, position",
+          [questionIds],
+        )
+      ).rows as Array<Record<string, unknown>>)
     : [];
   const alternativesByQuestion = new Map<string, Array<{ label: string; text: string }>>();
   for (const alternative of alternativeRows) {
@@ -133,7 +180,9 @@ async function getReviewResultFromDatabase(documentId: string): Promise<ReviewRe
     pages: Number(document.page_count),
     method: document.extraction_method as ReviewResult["method"],
     sourceText: String(document.source_text),
-    ...(document.identification ? { identification: document.identification as ReviewResult["identification"] } : {}),
+    ...(document.identification
+      ? { identification: document.identification as ReviewResult["identification"] }
+      : {}),
     questions,
   };
 }

@@ -11,7 +11,8 @@
     "benchmark:classification": "node --env-file-if-exists=../../.env ./node_modules/tsx/dist/cli.mjs scripts/benchmark-classification.ts",
     "lint": "biome lint .",
     "test:postgres": "node scripts/run-integration.mjs postgres",
-    "test:ocr": "node scripts/run-integration.mjs ocr"
+    "test:ocr": "node scripts/run-integration.mjs ocr",
+    "audit:source": "node scripts/audit-source.mjs"
   },
   "keywords": [],
   "author": "",

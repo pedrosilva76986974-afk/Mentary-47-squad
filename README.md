@@ -84,7 +84,7 @@ A resposta esperada é:
 
 O endpoint `POST /documents` recebe o arquivo no campo `document`. Neste momento, são aceitos PDF, PNG e JPG/JPEG, com tamanho máximo de 20 MB. PDFs podem ter até 50 páginas. Para limitar o uso de memória durante OCR e análise por IA, a API processa um upload por vez; uploads simultâneos adicionais recebem HTTP 429 e podem ser reenviados quando o processamento atual terminar.
 
-Você pode selecionar um arquivo na tela em `http://localhost:3000` ou enviá-lo pelo PowerShell, substituindo o caminho pelo arquivo desejado:
+Durante o desenvolvimento, selecione o arquivo em `http://localhost:5173` (ou em `http://localhost:3000` após compilar os dois projetos). Também é possível enviá-lo pelo PowerShell, substituindo o caminho pelo arquivo desejado:
 
 ```powershell
 curl.exe -F "document=@C:\caminho\para\prova.pdf" http://localhost:3000/documents
@@ -190,7 +190,7 @@ As histórias e seus requisitos estão em `docs/HistoriasUsuarios.markdown`. A p
 
 Durante o upload, use **Cancelar envio e processamento** para abortar a requisição. O backend detecta a desconexão e propaga o cancelamento entre etapas e páginas, cancela a renderização e termina o worker OCR ativo. Validação, tarefas nativas curtas e operações de armazenamento já iniciadas podem terminar antes de o cancelamento ser observado; registros criados por uma solicitação cancelada são desfeitos quando detectados antes da resposta.
 
-Na revisão, **Cancelar análise da IA** chama `POST /documents/{id}/classification/cancel`. A fila persiste `cancelled`, aborta o fetch ativo e não inicia novos lotes. Resultados de lotes já concluídos permanecem como parciais; é possível tentar novamente. Cancelar novamente é idempotente, e análises concluídas não viram canceladas. Fechar a revisão só interrompe o acompanhamento, mantendo a tarefa em segundo plano. Abortar o HTTP não garante descarregamento imediato do modelo da GPU.
+Na revisão, **Cancelar classificação** chama `POST /documents/{id}/classification/cancel`. A fila persiste `cancelled`, aborta o fetch ativo e não inicia novos lotes. Resultados de lotes já concluídos permanecem como parciais; é possível tentar novamente. Cancelar novamente é idempotente, e análises concluídas não viram canceladas. Fechar a revisão só interrompe o acompanhamento, mantendo a tarefa em segundo plano. Abortar o HTTP não garante descarregamento imediato do modelo da GPU.
 
 Documentos sem questões não iniciam análise pedagógica. A extração/OCR ainda precisa ler o arquivo para determinar se há candidatos; essa etapa pode ser cancelada pelo usuário.
 
@@ -223,3 +223,5 @@ O workflow .github/workflows/ci.yml executa lint, builds, testes gerais, Postgre
 - [Catálogo de bugs](docs/CATALOGO-DE-BUGS.md)
 - [Testes de tela](docs/TESTES-DE-TELA.md)
 - [Auditoria das issues e backlog de avaliações](docs/AUDITORIA-ISSUES.md)
+- [Guia do código: módulos, API e manutenção](docs/GUIA-DO-CODIGO.md)
+- [Revisão técnica e pendências](docs/REVISAO-CODIGO.md)

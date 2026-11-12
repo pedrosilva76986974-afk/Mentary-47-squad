@@ -108,4 +108,3 @@ function extractQuestionAlternatives(
 }
 
 export { extractQuestionAlternatives };
-export type { ExtractedAlternatives };

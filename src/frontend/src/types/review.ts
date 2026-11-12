@@ -53,7 +53,7 @@ export type UploadResult = {
   questionCount: number;
   questions: Question[];
   reviewUrl: string;
-  sourceUrl?: string;
+
   identification?: {
     method: "ollama" | "ollama+rules" | "rules";
     model?: string;

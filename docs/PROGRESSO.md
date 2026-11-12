@@ -244,3 +244,16 @@ Correções implementadas:
 Validação local: lint e builds dos dois projetos passaram. Suíte geral: 125 testes, 123 passaram, zero falhas e duas integrações opcionais desativadas. PostgreSQL real e OCR real são conferidos separadamente na execução remota da entrega. Não houve nova homologação com participantes humanos nem medição nova do desempenho pedagógico do modelo.
 
 Configurações administrativas: proteção da main não pôde ser consultada (HTTP 403); Projects não pôde ser administrado com as ferramentas da integração. Esses pontos não foram marcados como concluídos pela auditoria. Nenhum estado de issue foi alterado para encerrar trabalho ainda não integrado.
+
+## 12/11/2026 — Guia do código e revisão aprofundada
+
+- Publicados GUIA-DO-CODIGO.md e REVISAO-CODIGO.md, com mapa de serviços/componentes, fluxos, API, erros, dados, configuração, testes, manutenção e limites.
+- Issues #36–#43 registram documentação, retenção, concorrência parcial, erros/limites de renderização, autenticação, recuperação de rascunhos, fila distribuída e homologação humana. Avaliações/dashboards continuam no backlog #27–#34; não foram implementados.
+- Revisões concorrentes do mesmo documento são serializadas na instância atual. Leituras PostgreSQL usam snapshot consistente; garantia entre servidores/controle de versão continuam pendentes em #38.
+- Retenção agora inclui classificações; não remove documentos com análise ativa. Início/consulta e exclusão são coordenados, sem bloquear documentos independentes.
+- JSON inválido e excessivo retornam 400/413. OCR e prévia de PDF validam limites de canvas antes da alocação nativa.
+- Removidos contador permanentemente oculto, dados sem consumo no frontend, cinco exportações de tipos internas e configuração de teste sem efeito. Compatibilidades de dados antigos foram mantidas.
+- Novo npm run audit:source inventaria 49 arquivos de produção e 32 arquivos de teste; sem candidatos remanescentes a arquivos/exports/CSS sem referência. Análise auxiliar, não prova de ausência de todo código morto.
+- Validação local final: lint/build dos dois projetos aprovados; 133 testes, 131 aprovados, zero falhas e duas integrações opcionais desativadas na suíte geral. PostgreSQL e OCR reais são conferidos no novo commit do PR #35.
+
+Sem teste de carga, pesquisa com professores ou validação de múltiplas instâncias nesta rodada. Nenhum dado real, credencial ou estado de issue foi removido para simular conclusão.

@@ -35,6 +35,16 @@ Regressões acrescentadas na auditoria de 11/11/2026:
 
 No backend: npm test; npm run test:postgres; npm run test:ocr. A integração PostgreSQL cria uma base com nome aleatório e remove apenas essa base. Não executa reset no banco da aplicação.
 
+Segunda rodada de 12/11/2026:
+
+| ID | Reprodução | Resultado esperado | Evidência |
+| --- | --- | --- | --- |
+| REVISAO-03 | PATCH simultâneo de duas questões do mesmo documento | Preservar ambas as edições na instância atual | documents.test.ts, postgres.integration.test.ts e document-lock.test.ts |
+| RETENCAO-01 | Expirar documento com snapshot pedagógico salvo | Remover também a classificação; preservar documentos recentes e publicados | document-retention.test.ts e postgres.integration.test.ts |
+| RETENCAO-02 | Expirar enquanto a classificação está ativa | Adiar; limpar após finalizar cancelamento sem recriar o snapshot | retention-classification.test.ts |
+| API-01 | Enviar JSON inválido ou acima do limite | HTTP 400/413, sem consulta ao banco nem vazamento de detalhes do parser | http-errors.test.ts |
+| PDF-01 | PDF com página excessiva ou recorte minúsculo que exige canvas gigante | Rejeitar antes de renderizar ou iniciar OCR | canvas-limits.test.ts |
+
 ## Limites conhecidos
 
 - OCR ilegível, colunas ambíguas, fórmulas com posição de expoentes e questões sem marcadores podem exigir correção manual. Os testes não cobrem todos os documentos possíveis.

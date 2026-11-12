@@ -1,11 +1,12 @@
-import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename, rm } from "node:fs/promises";
+import { withDocumentLock } from "./document-lock.service.js";
 import { resolve } from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { classifyPedagogy, classificationTargetMs, type PedagogicalSuggestion } from "./ollama.service.js";
 import { getReviewResult } from "./review-results.service.js";
 import { DocumentValidationError } from "./document-validation.service.js";
-export type ClassificationJob = {
+type ClassificationJob = {
   version?: number;
   source?: ReturnType<typeof questionSnapshot>;
   documentId: string;
@@ -84,6 +85,10 @@ async function save(job: ClassificationJob): Promise<void> {
   }
 }
 export async function getClassification(id: string): Promise<ClassificationJob | undefined> {
+  return withDocumentLock(id, () => getClassificationUnlocked(id));
+}
+
+async function getClassificationUnlocked(id: string): Promise<ClassificationJob | undefined> {
   if (activeJobs.has(id)) return structuredClone(activeJobs.get(id)!);
   try {
     const job = JSON.parse(await readFile(classificationFilePath(id), "utf8")) as ClassificationJob;
@@ -99,12 +104,16 @@ export async function getClassification(id: string): Promise<ClassificationJob |
   }
 }
 export async function startClassification(id: string): Promise<ClassificationJob | undefined> {
+  return withDocumentLock(id, () => startClassificationUnlocked(id));
+}
+
+async function startClassificationUnlocked(id: string): Promise<ClassificationJob | undefined> {
   classificationFilePath(id);
   const review = await getReviewResult(id);
   if (!review) return undefined;
   if (review.questions.length === 0)
     throw new DocumentValidationError("Nenhuma questão identificada para analisar.");
-  const existing = await getClassification(id);
+  const existing = await getClassificationUnlocked(id);
   const unchanged = existing && !(await classificationIsStale(id, existing));
   const sourceHash = unchanged ? existing.sourceHash : hashSnapshot(questionSnapshot(review.questions));
   const running = runningJob(id);
@@ -212,6 +221,19 @@ export async function startClassification(id: string): Promise<ClassificationJob
     .then(run, run)
     .catch((e) => console.error("Falha ao persistir análise pedagógica.", e));
   return structuredClone(job);
+}
+
+/** Includes terminal jobs still completing their final disk write. */
+export function classificationIsActive(id: string): boolean {
+  return activeJobs.has(id);
+}
+
+/** Call while holding the document lock, after excluding active jobs. */
+export async function removeClassification(id: string): Promise<void> {
+  if (classificationIsActive(id)) throw new Error("A classificação ainda está em processamento.");
+  const file = classificationFilePath(id);
+  await pendingWrites.get(file);
+  await rm(file, { force: true });
 }
 export async function classificationIsStale(id: string, job: ClassificationJob): Promise<boolean> {
   const review = await getReviewResult(id);

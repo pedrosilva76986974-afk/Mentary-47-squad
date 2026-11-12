@@ -119,6 +119,18 @@ test("real PostgreSQL migrations, round trip, rollback and export", {
     assert.equal(updated.status,200);assert.equal(updated.body.questions[0].pageStart,null);assert.equal(updated.body.questions[0].visualReferences[0].association,"manual");
     const standalone=structuredClone(review), standaloneId=randomUUID();standalone.documentId=standaloneId;standalone.origin.id=standaloneId;standalone.questions[0]!.id=standaloneId+"-q1";standalone.questions[0]!.prompt="Selecione a alternativa indicada no enunciado.";standalone.questions[0]!.pedagogy={};
     await saveReviewResultToDatabase(standalone);assert.equal((await searchQuestionBank({})).total,2,"BNCC and external identities must not block the native bank");
+    const concurrent = structuredClone(standalone), concurrentId = randomUUID();
+    concurrent.documentId = concurrentId; concurrent.origin.id = concurrentId;
+    concurrent.questions = [1, 2].map(index => ({ ...structuredClone(standalone.questions[0]!), id: `${concurrentId}-q${index}`, status: "pending_review" as const }));
+    await saveReviewResultToDatabase(concurrent);
+    const concurrentUpdates = await Promise.all([1, 2].map(index => request(app)
+      .patch(`/documents/${concurrentId}/review/questions/${concurrentId}-q${index}`)
+      .send({ prompt: `Questão ${index} revisada simultaneamente?` })));
+    assert.deepEqual(concurrentUpdates.map(response => response.status), [200, 200]);
+    assert.deepEqual((await getReviewResultFromDatabase(concurrentId))!.questions.map(question => question.prompt), [
+      "Questão 1 revisada simultaneamente?", "Questão 2 revisada simultaneamente?",
+    ]);
+    await deleteReviewResultFromDatabase(concurrentId);
     const firstPage=await searchQuestionBank({pageSize:"1"}),secondPage=await searchQuestionBank({pageSize:"1",page:"2"});
     assert.notEqual(firstPage.questions[0].id,secondPage.questions[0].id);assert.equal(secondPage.total,2);assert.equal((await searchQuestionBank({page:"3",pageSize:"1"})).questions.length,0);
     const directory=await mkdtemp(join(tmpdir(),"mentary-bank-retention-"));

@@ -2,6 +2,8 @@
 
 Escopo confirmado pelo responsável: concluir o extrator e cadastrar avaliações/dashboards como backlog futuro. A auditoria compara critérios das issues com código, testes e documentação; issue fechada não é, sozinha, evidência de implementação. As alterações ainda precisam ser revisadas e integradas.
 
+Continuação em 12/11/2026: a [revisão técnica do código](REVISAO-CODIGO.md) registra novos achados e as issues #36–#43. O [guia do código](GUIA-DO-CODIGO.md) documenta módulos, API, persistência, configuração e manutenção. As garantias de concorrência são para uma instância; o atendimento distribuído continua parcial em #38 e #42.
+
 ## Rastreabilidade do extrator
 
 | Issue | Situação verificada | Evidência e ação |

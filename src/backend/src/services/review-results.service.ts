@@ -1,4 +1,5 @@
 import { regionMatchesQuestion } from "./question-regions.service.js";
+import { withDocumentLock } from "./document-lock.service.js";
 import { validateRegion } from "./source-preview.service.js";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -172,6 +173,14 @@ async function updateReviewQuestion(
   questionId: string,
   update: ReviewQuestionUpdate,
 ): Promise<ReviewResult | undefined> {
+  return withDocumentLock(documentId, () => updateReviewQuestionUnlocked(documentId, questionId, update));
+}
+
+async function updateReviewQuestionUnlocked(
+  documentId: string,
+  questionId: string,
+  update: ReviewQuestionUpdate,
+): Promise<ReviewResult | undefined> {
   const review = await getReviewResult(documentId);
   if (!review) return undefined;
   const questionIndex = review.questions.findIndex((question) => question.id === questionId);
@@ -326,4 +335,4 @@ async function removeReviewResult(documentId: string): Promise<void> {
 }
 
 export { findQuestionVisualReferences, getReviewResult, migrateLegacyReviewFiles, removeReviewResult, saveReviewResult, updateReviewQuestion };
-export type { ReviewQuestion, ReviewQuestionUpdate, ReviewResult };
+export type { ReviewQuestion, ReviewResult };

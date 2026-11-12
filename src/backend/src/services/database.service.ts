@@ -60,8 +60,11 @@ async function initializeDatabase(): Promise<void> {
         }
       }
     } finally {
-      await connection.query("SELECT pg_advisory_unlock(471701)");
-      connection.release();
+      try {
+        await connection.query("SELECT pg_advisory_unlock(471701)");
+      } finally {
+        connection.release();
+      }
     }
   })();
   try {

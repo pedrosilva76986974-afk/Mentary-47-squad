@@ -1,4 +1,5 @@
 import { detectVisualReference } from "./visual-detection.service.js";
+import { assertRenderSize } from "./canvas-limits.service.js";
 import { locateQuestionRegions, type QuestionRegion, type PositionedText } from "./question-regions.service.js";
 import type { Region } from "./source-preview.service.js";
 import { createCanvas } from "@napi-rs/canvas";
@@ -243,6 +244,7 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer, signal?: A
       }
 
       const viewport = page.getViewport({ scale: 1.6 });
+      assertRenderSize(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const context = canvas.getContext("2d");
       const render = page.render({ canvas: canvas as never, canvasContext: context as never, viewport });

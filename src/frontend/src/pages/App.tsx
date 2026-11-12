@@ -175,7 +175,7 @@ function App() {
             questionCount: payload.questions.length,
             text: payload.sourceText ?? "",
             reviewUrl: `/documents/${encodeURIComponent(reviewId)}/review`,
-            sourceUrl: `/documents/${encodeURIComponent(reviewId)}/source`,
+
           });
           setFeedback(null);
         }
@@ -483,9 +483,6 @@ function App() {
                   </details>
                 )}
               </div>
-              <span className="review-count" aria-label={`${result.questionCount} questões`}>
-                {result.questionCount}
-              </span>
             </div>
 
             {feedback && (
