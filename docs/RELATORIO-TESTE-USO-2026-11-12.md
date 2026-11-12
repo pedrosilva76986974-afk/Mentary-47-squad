@@ -9,6 +9,7 @@ Execução pelo agente em navegador real, usando dados fictícios. Não houve pa
 - PDF fictício `mentary-ensaio-UX1212A.pdf`: duas questões aritméticas, três alternativas e duas figuras coloridas.
 - Revisão PDF: `0c3338e1-f8a9-444d-a3dd-f6ba6f25a07a`.
 - Imagem fictícia `mentary-cancelamento-UX1212A.png`, derivada do PDF; revisão OCR `094d5c8a-5332-4fce-ba0a-bce747f20df9`.
+- A primeira tentativa cancelada criou o registro fictício `d0f33811-e3ce-4c0a-8c21-a729affc874b` antes da correção do proxy. Esse achado foi preservado no registro do ensaio; não se trata de documento do usuário.
 - Arquivo TXT fictício para verificar rejeição de formato.
 - Originais e capturas do ensaio permanecem em `tmp/ux-20261112` na máquina de teste; não são arquivos de usuário nem requisito para executar a suíte automatizada.
 
@@ -21,6 +22,7 @@ Execução pelo agente em navegador real, usando dados fictícios. Não houve pa
 | Título da aba | Banco e revisão mantinham “Envio de documento”. | Títulos acompanham a tela ativa, inclusive ao voltar do banco. |
 | Mensagem da questão anterior | Após rejeitar a questão 2 e ir para a questão 1, a confirmação de rejeição continuava no topo. | Feedback é limpo ao trocar a questão; verificado com salvamento e navegação. |
 | OCR perde um rótulo intermediário | A imagem gerou alternativas A e C, sem B. O gabarito era sinalizado, mas a sequência de alternativas não. | Sequências convencionais com lacuna são sinalizadas para conferência. A alternativa B não é inventada. Ordem C/A/B e rótulos V/F não geram o mesmo aviso; aprovação humana pode confirmar rótulos intencionais. |
+| Cancelamento pelo proxy | A tela confirmou cancelamento, mas Vite mantinha a conexão da API e um registro fictício foi criado. | Proxy fecha a requisição upstream ao desconectar o navegador. O teste falhou com a configuração antiga e passou com a correção; teste HTTP pela instância real resultou em AbortError e zero novos registros. |
 
 ## Cenários e resultados
 
@@ -47,14 +49,16 @@ Execução pelo agente em navegador real, usando dados fictícios. Não houve pa
 | Retirar aprovação na revisão e exportar seleção antiga em outra aba | Exportação bloqueada; nova consulta retornou zero questões do ensaio. |
 | Segunda questão com página desconhecida e rejeição | Null preservado; origem continuou acessível sem inventar página. |
 | Envio de imagem para OCR | Duas questões reconhecidas; omissão de B detectada no ensaio e agora sinalizada. |
-| Cancelar envio enquanto OCR estava ativo | “Envio e processamento cancelados”; botão Enviar material habilitado novamente. |
+| Cancelar envio enquanto OCR estava ativo | Mensagem e botão retornaram corretamente; conferência de armazenamento revelou o defeito do proxy, corrigido e verificado também no servidor. |
 | Celular: revisão e banco | Painéis empilhados, campos e botões acessíveis, sem rolagem horizontal na largura verificada. |
 | Navegação por teclado | Link do banco recebeu foco por Tab com contorno visível. Não equivale a auditoria completa de acessibilidade. |
 | Console da revisão após retestes | Sem erros inesperados capturados. Respostas 400 de validações intencionais não são falhas do ensaio. |
 
 ## Evidência automatizada e estado final
 
-Após as correções: lint e builds dos dois projetos aprovados; suíte geral com 137 testes, 135 aprovados, zero falhas e duas integrações opcionais desativadas nessa etapa. Regressões adicionais verificam lacunas OCR e preservação do aviso até a confirmação humana. PostgreSQL/OCR reais são executados separadamente no CI do commit da entrega.
+Após as correções: lint e builds dos dois projetos aprovados; suíte final com 138 testes, 136 aprovados, zero falhas e duas integrações opcionais desativadas nessa etapa. O teste de cancelamento foi validado contra a configuração antiga (falhou) e corrigida (passou). Regressões adicionais verificam lacunas OCR e preservação do aviso até a confirmação humana. PostgreSQL/OCR reais são executados separadamente no CI do commit da entrega.
+
+O teste do proxy sobe Vite e uma API fictícia em portas temporárias; precisa das dependências dos dois projetos instaladas, como já ocorre no workflow. O teste suplementar na instância real usou o nome exclusivo `mentary-cancelamento-regressao-UX1212B.png`: contagem no manifesto permaneceu zero após abortar a requisição.
 
 A publicação fictícia foi retirada ao final para não permanecer no acervo: questão 1 em revisão, questão 2 rejeitada. A revisão OCR permanece pendente. Não foram apagados arquivos ou revisões do usuário.
 

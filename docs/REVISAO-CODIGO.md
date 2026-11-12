@@ -22,7 +22,7 @@ Escopo: extrator atual, documentação técnica, consistência de dados, código
 
 Foram inspecionados os pontos de entrada, imports, exports, scripts, testes e seletores CSS. O comando `npm run audit:source`, executado em `src/backend`, torna o inventário repetível.
 
-Na versão desta rodada, o inventário encontra 49 arquivos TypeScript/TSX de produção e 32 arquivos de teste. Não restam candidatos a arquivos de produção sem caminho no grafo estático, exportações sem referência em outros arquivos ou classes CSS ausentes do código frontend após as remoções verificadas.
+Na versão desta rodada, o inventário encontra 49 arquivos TypeScript/TSX de produção e 33 arquivos de teste. Não restam candidatos a arquivos de produção sem caminho no grafo estático, exportações sem referência em outros arquivos ou classes CSS ausentes do código frontend após as remoções verificadas.
 
 Isso não é prova de ausência universal de código morto: o inventário usa análise textual de imports/exports e nomes de classes, e requer conferência humana. TypeScript e lint complementam a checagem de variáveis, parâmetros, imports e trechos inalcançáveis.
 

@@ -42,6 +42,8 @@ flowchart LR
 
 Cancelamento é cooperativo: há verificações entre etapas e páginas, interrupção da espera, cancelamento de renderização e encerramento do worker OCR ativo. Operações nativas já iniciadas podem precisar terminar. Origens criadas antes de detectar o cancelamento são desfeitas pelo controller quando aplicável.
 
+Em desenvolvimento, `vite.config.ts` propaga o fechamento da resposta do navegador à requisição encaminhada para `/documents`. Abortar apenas o fetch do navegador, sem fechar a conexão upstream do proxy, podia deixar a API processando. `proxy-cancellation.test.ts` verifica esse elo usando Vite real e uma API fictícia; instale as dependências do frontend também para executá-lo.
+
 ### Limites implementados
 
 | Recurso | Limite |
