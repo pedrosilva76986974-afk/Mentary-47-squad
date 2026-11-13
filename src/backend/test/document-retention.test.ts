@@ -9,17 +9,20 @@ const testDirectory = await mkdtemp(join(tmpdir(), "mentary-retention-tests-"));
 const registryPath = join(testDirectory, "manifest.json");
 const reviewDirectory = join(testDirectory, "reviews");
 const documentDirectory = join(testDirectory, "documents");
+const classificationDirectory = join(testDirectory, "classifications");
 const previousValues = {
   registry: process.env.MENTARY_UPLOAD_REGISTRY,
   reviews: process.env.MENTARY_REVIEW_DIRECTORY,
   documents: process.env.MENTARY_DOCUMENT_DIRECTORY,
   retention: process.env.MENTARY_RETENTION_DAYS,
+  classifications: process.env.MENTARY_CLASSIFICATION_DIRECTORY,
 };
 
 process.env.MENTARY_UPLOAD_REGISTRY = registryPath;
 process.env.MENTARY_REVIEW_DIRECTORY = reviewDirectory;
 process.env.MENTARY_DOCUMENT_DIRECTORY = documentDirectory;
 process.env.MENTARY_RETENTION_DAYS = "30";
+process.env.MENTARY_CLASSIFICATION_DIRECTORY = classificationDirectory;
 
 after(async () => {
   if (previousValues.registry === undefined) delete process.env.MENTARY_UPLOAD_REGISTRY;
@@ -30,6 +33,8 @@ after(async () => {
   else process.env.MENTARY_DOCUMENT_DIRECTORY = previousValues.documents;
   if (previousValues.retention === undefined) delete process.env.MENTARY_RETENTION_DAYS;
   else process.env.MENTARY_RETENTION_DAYS = previousValues.retention;
+  if (previousValues.classifications === undefined) delete process.env.MENTARY_CLASSIFICATION_DIRECTORY;
+  else process.env.MENTARY_CLASSIFICATION_DIRECTORY = previousValues.classifications;
   await rm(testDirectory, { recursive: true, force: true });
 });
 
@@ -47,6 +52,7 @@ test("removes only expired review files and their origin records", async () => {
   });
   await mkdir(reviewDirectory, { recursive: true });
   await mkdir(documentDirectory, { recursive: true });
+  await mkdir(classificationDirectory, { recursive: true });
   await writeFile(registryPath, JSON.stringify([
     origin(expiredId, new Date(now - 31 * 24 * 60 * 60 * 1000).toISOString()),
     origin(recentId, new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString()),
@@ -55,6 +61,8 @@ test("removes only expired review files and their origin records", async () => {
   await writeFile(join(reviewDirectory, `${recentId}.json`), "recent");
   await writeFile(join(documentDirectory, `${expiredId}.pdf`), "expired source");
   await writeFile(join(documentDirectory, `${recentId}.pdf`), "recent source");
+  await writeFile(join(classificationDirectory, `${expiredId}.json`), '{"source":"expired text"}');
+  await writeFile(join(classificationDirectory, `${recentId}.json`), '{"source":"recent text"}');
 
   const removedCount = await cleanupExpiredDocuments(now);
   const remainingRecords = JSON.parse(await readFile(registryPath, "utf8")) as Array<{ id: string }>;
@@ -63,6 +71,8 @@ test("removes only expired review files and their origin records", async () => {
   assert.deepEqual(remainingRecords.map((record) => record.id), [recentId]);
   await assert.rejects(readFile(join(reviewDirectory, `${expiredId}.json`)));
   await assert.rejects(readFile(join(documentDirectory, `${expiredId}.pdf`)));
+  await assert.rejects(readFile(join(classificationDirectory, `${expiredId}.json`)), { code: "ENOENT" });
+  assert.match(await readFile(join(classificationDirectory, `${recentId}.json`), "utf8"), /recent text/);
   assert.equal(await readFile(join(reviewDirectory, `${recentId}.json`), "utf8"), "recent");
   assert.equal(await readFile(join(documentDirectory, `${recentId}.pdf`), "utf8"), "recent source");
 });

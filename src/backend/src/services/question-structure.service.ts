@@ -1,5 +1,5 @@
 import type { ParsedQuestion } from "./question-parser.service.js";
-import { extractQuestionAlternatives } from "./question-alternatives.service.js";
+import { extractQuestionAlternatives, hasAlternativeLabelGaps } from "./question-alternatives.service.js";
 
 function structureQuestion(question: ParsedQuestion, sourceQuestion: ParsedQuestion = question): ParsedQuestion {
   const prompt = question.prompt !== undefined ? question.prompt.trim() : sourceQuestion.text.trim();
@@ -18,7 +18,7 @@ function structureQuestion(question: ParsedQuestion, sourceQuestion: ParsedQuest
   };
   result.missingComponents = [
     ...(!result.prompt?.trim() ? ["prompt" as const] : []),
-    ...(alternatives.length < 2 ? ["alternatives" as const] : []),
+    ...(alternatives.length < 2 || hasAlternativeLabelGaps(alternatives) ? ["alternatives" as const] : []),
     ...(!result.answerKey?.trim() ? ["answer" as const] : []),
   ];
   return result;

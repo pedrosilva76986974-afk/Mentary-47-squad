@@ -8,9 +8,21 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      "/assessments": { target: "http://localhost:3000", changeOrigin: true },
+      "/questions": { target: "http://localhost:3000", changeOrigin: true },
       "/documents": {
         target: "http://localhost:3000",
         changeOrigin: true,
+        configure(proxy) {
+          proxy.on("proxyReq", (upstream, _request, response) => {
+            // A browser abort must also close the API connection so OCR can stop.
+            const cancel = () => {
+              if (!response.writableEnded) upstream.destroy();
+            };
+            response.once("close", cancel);
+            upstream.once("close", () => response.off("close", cancel));
+          });
+        },
       },
     },
   },

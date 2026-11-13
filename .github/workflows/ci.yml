@@ -1,0 +1,144 @@
+name: CI do Mentary
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: src/backend
+
+jobs:
+  quality:
+    name: Código, builds e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ""
+      MENTARY_POSTGRES_TEST: "0"
+      MENTARY_OCR_TEST: "0"
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Preparar Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            src/backend/package-lock.json
+            src/frontend/package-lock.json
+      - name: Instalar backend
+        run: npm ci
+      - name: Instalar frontend
+        run: npm ci
+        working-directory: src/frontend
+      - name: Verificar código do backend
+        run: npm run lint
+      - name: Verificar código do frontend
+        run: npm run lint
+        working-directory: src/frontend
+      - name: Compilar frontend e verificar tipos
+        run: npm run build
+        working-directory: src/frontend
+      - name: Compilar backend e verificar tipos
+        run: npm run build
+      - name: Executar testes gerais
+        run: npm test
+      - name: Guardar arquivos compilados
+        uses: actions/upload-artifact@v6
+        with:
+          name: mentary-build-${{ github.sha }}
+          path: |
+            src/backend/dist/
+            src/backend/public/
+          if-no-files-found: error
+          retention-days: 7
+
+  postgres:
+    name: Integração PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: mentary_ci
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: mentary_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mentary_ci -d mentary_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://mentary_ci:ci_only_password@localhost:5432/mentary_ci
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Preparar Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/backend/package-lock.json
+      - name: Instalar backend
+        run: npm ci
+      - name: Validar migrações e persistência em banco isolado
+        run: npm run test:postgres
+
+  ocr:
+    name: Integração OCR real
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Preparar Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/backend/package-lock.json
+      - name: Instalar backend
+        run: npm ci
+      - name: Validar OCR em PNG, JPEG e PDF escaneado
+        run: npm run test:ocr
+
+  # Preserve the original check name for repositories already requiring it.
+  checks:
+    name: checks
+    needs: [quality, postgres, ocr]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    defaults:
+      run:
+        working-directory: .
+    env:
+      QUALITY_RESULT: ${{ needs.quality.result }}
+      POSTGRES_RESULT: ${{ needs.postgres.result }}
+      OCR_RESULT: ${{ needs.ocr.result }}
+    steps:
+      - name: Exigir aprovação de todas as verificações
+        run: |
+          test "$QUALITY_RESULT" = success
+          test "$POSTGRES_RESULT" = success
+          test "$OCR_RESULT" = success

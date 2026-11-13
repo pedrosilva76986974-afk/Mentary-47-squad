@@ -1,6 +1,18 @@
+import request from "supertest";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
+import { getReviewResult } from "../src/services/review-results.service.js";
+import { startClassification, cancelClassification, getClassification } from "../src/services/pedagogical-classification.service.js";
+import { assessmentFixture } from "./fixtures/assessment.js";
+import { app } from "../src/app.js";
+import { searchQuestionBank, selectBankQuestions, publishExistingApprovedQuestions } from "../src/services/question-bank.service.js";
+import { deleteReviewResultFromDatabase } from "../src/services/postgres-review.service.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { cleanupExpiredDocuments } from "../src/services/document-retention.service.js";
 import { test } from "node:test";
 import { Client } from "pg";
 import { closeDatabase, getDatabasePool, initializeDatabase } from "../src/services/database.service.js";
@@ -9,7 +21,7 @@ import type { ReviewResult } from "../src/services/review-results.service.js";
 
 test("real PostgreSQL migrations, round trip, rollback and export", {
   skip: process.env.MENTARY_POSTGRES_TEST !== "1",
-}, async () => {
+}, async (t) => {
   const originalUrl = process.env.DATABASE_URL;
   assert.ok(originalUrl, "Configure DATABASE_URL for the isolated PostgreSQL test.");
   const name = `mentary_test_${randomUUID().replaceAll("-", "")}`;
@@ -24,7 +36,7 @@ test("real PostgreSQL migrations, round trip, rollback and export", {
     process.env.DATABASE_URL = url.toString();
     await initializeDatabase();
     const pool = getDatabasePool();
-    assert.equal((await pool.query("SELECT * FROM schema_migrations")).rowCount, 4);
+    assert.equal((await pool.query("SELECT * FROM schema_migrations")).rowCount, 8);
     // Reproduce installations whose migration 003 predates the missing-fields column.
     await pool.query("DROP VIEW extrator.approved_question_exports");
     await pool.query(`CREATE VIEW extrator.approved_question_exports AS
@@ -39,7 +51,7 @@ test("real PostgreSQL migrations, round trip, rollback and export", {
       questions: [{ id: `${id}-q1`, number: 1, text: "Questão de teste", prompt: "Quanto é 2 + 2?",
         responseType: "multiple_choice", alternatives: [{ label: "A", text: "3" }, { label: "B", text: "4" }],
         answerKey: "B", missingComponents: [], pageStart: 1, pageEnd: 1, confidence: "high", status: "pending_review",
-        reviewedBy: "Revisor fictício", pedagogy: { discipline: "Matemática", topic: "Adição", bnccSkills: ["EF01MA01"],
+        reviewedBy: "Revisor fictício", pedagogy: { discipline: "Matemática", grade:"1º ano", topic: "Adição", bnccSkills: ["EF01MA01"],
           descriptor: "D1", difficulty: "easy", userId: randomUUID(), institutionId: randomUUID() },
       }],
     };
@@ -70,6 +82,154 @@ test("real PostgreSQL migrations, round trip, rollback and export", {
     review.questions[0]!.status = "rejected";
     await saveReviewResultToDatabase(review);
     assert.equal((await pool.query("SELECT * FROM extrator.approved_question_exports")).rowCount, 0);
+    assert.equal((await searchQuestionBank({})).total, 0, "Rejected questions must disappear");
+    review.questions[0]!.status="approved";
+    review.questions[0]!.pageStart=null; review.questions[0]!.pageEnd=null;
+    await saveReviewResultToDatabase(review);
+    assert.equal((await getReviewResultFromDatabase(id))!.questions[0]!.pageStart,null);
+    const bank = await searchQuestionBank({discipline:"matemática",grade:"1º ano",topic:"Adição",descriptor:"D1",difficulty:"easy",bncc:"ef01ma01",q:"Quanto"});
+    assert.equal(bank.total,1); assert.equal(bank.questions[0].sources[0].pageStart,null);
+    const bankId = bank.questions[0].id;
+    const duplicate=structuredClone(review); const duplicateId=randomUUID(); duplicate.documentId=duplicateId;duplicate.origin.id=duplicateId;
+    duplicate.questions[0]!.id=duplicateId+"-q1";duplicate.questions[0]!.pedagogy!.grade="2º ano";
+    await Promise.all([saveReviewResultToDatabase(review),saveReviewResultToDatabase(duplicate)]);
+    assert.equal((await searchQuestionBank({})).total,1);
+    assert.equal((await searchQuestionBank({grade:"1º ano"})).total,1,"Filters must find an older active source too");
+    assert.equal((await searchQuestionBank({grade:"2º ano"})).total,1);
+    assert.equal((await selectBankQuestions([bankId,bankId])).length,1);
+    assert.equal((await selectBankQuestions([bankId]))[0].sources.length,2);
+    await assert.rejects(selectBankQuestions([randomUUID()]));
+    assert.equal((await searchQuestionBank({q:"' OR true -- %_"})).total,0);
+    assert.equal((await request(app).get("/questions").query({pageSize:1})).body.total,1);
+    assert.equal((await request(app).get("/questions").query({page:0})).status,400);
+    assert.equal((await request(app).post("/questions/selection").send({ids:[bankId]})).body.questions[0].id,bankId);
+    assert.equal((await request(app).get("/questions").query({grade:"não existe"})).body.total,0);
+    await assert.rejects(pool.query("INSERT INTO banco.questions(id,fingerprint,prompt,alternatives,answer_key) VALUES($1,'invalid','Test',$2,'Z')",[randomUUID(),JSON.stringify([{label:"A",text:"1"},{label:"B",text:"2"}])]));
+    await assert.rejects(pool.query(await readFile("../../database/migrations/006_unknown_source_page.down.sql","utf8")));
+    await assert.rejects(pool.query(await readFile("../../database/migrations/005_local_question_bank.down.sql","utf8")));
+    review.questions[0]!.status="pending_review";await saveReviewResultToDatabase(review);
+    assert.equal((await selectBankQuestions([bankId]))[0].sources.length,1);
+    duplicate.questions[0]!.status="rejected";await saveReviewResultToDatabase(duplicate);
+    assert.equal((await searchQuestionBank({})).total,0);
+    await assert.rejects(selectBankQuestions([bankId]));
+    review.questions[0]!.status="approved";await saveReviewResultToDatabase(review);
+    await deleteReviewResultFromDatabase(id);
+    assert.equal((await searchQuestionBank({})).total,1,"Retention must preserve published content and origin");
+    assert.equal((await selectBankQuestions([bankId]))[0].sources[0].origin.fileName,"test.pdf");
+    assert.equal(await publishExistingApprovedQuestions(),0);
+    assert.equal((await request(app).patch("/documents/"+duplicateId+"/review/questions/"+duplicateId+"-q1").send({pageStart:null})).status,400);
+    assert.equal((await request(app).patch("/documents/"+duplicateId+"/review/questions/"+duplicateId+"-q1").send({pageStart:2,pageEnd:2})).status,400);
+    assert.equal((await request(app).patch("/documents/"+duplicateId+"/review/questions/"+duplicateId+"-q1").send({visualReferences:[{page:1,kind:"graphic",region:{x:.9,y:0,width:.5,height:1}}]})).status,400);
+    const updated=await request(app).patch("/documents/"+duplicateId+"/review/questions/"+duplicateId+"-q1").send({pageStart:null,pageEnd:null,visualReferences:[{page:1,kind:"graphic",region:{x:0,y:.1,width:1,height:.4}}]});
+    assert.equal(updated.status,200);assert.equal(updated.body.questions[0].pageStart,null);assert.equal(updated.body.questions[0].visualReferences[0].association,"manual");
+    const standalone=structuredClone(review), standaloneId=randomUUID();standalone.documentId=standaloneId;standalone.origin.id=standaloneId;standalone.questions[0]!.id=standaloneId+"-q1";standalone.questions[0]!.prompt="Selecione a alternativa indicada no enunciado.";standalone.questions[0]!.pedagogy={};
+    await saveReviewResultToDatabase(standalone);assert.equal((await searchQuestionBank({})).total,2,"BNCC and external identities must not block the native bank");
+    const concurrent = structuredClone(standalone), concurrentId = randomUUID();
+    concurrent.documentId = concurrentId; concurrent.origin.id = concurrentId;
+    concurrent.questions = [1, 2].map(index => ({ ...structuredClone(standalone.questions[0]!), id: `${concurrentId}-q${index}`, status: "pending_review" as const }));
+    await saveReviewResultToDatabase(concurrent);
+    const concurrentUpdates = await Promise.all([1, 2].map(index => request(app)
+      .patch(`/documents/${concurrentId}/review/questions/${concurrentId}-q${index}`)
+      .send({ prompt: `Questão ${index} revisada simultaneamente?` })));
+    assert.deepEqual(concurrentUpdates.map(response => response.status), [200, 200]);
+    assert.deepEqual((await getReviewResultFromDatabase(concurrentId))!.questions.map(question => question.prompt), [
+      "Questão 1 revisada simultaneamente?", "Questão 2 revisada simultaneamente?",
+    ]);
+    await t.test("separate backend processes preserve edits and reject a stale revision", async () => {
+      const child = (question: number, changes: unknown) => promisify(execFile)(process.execPath, ["--import", "tsx", "test/helpers/distributed-process.ts", "review", concurrentId, `${concurrentId}-q${question}`, JSON.stringify(changes)], { env: process.env, timeout: 15000 });
+      const separate = await Promise.all([child(1, { prompt: "Processo independente 1?" }), child(2, { prompt: "Processo independente 2?" })]);
+      assert.ok(separate.every(item => JSON.parse(item.stdout.trim()).status === "saved"));
+      const current = (await getReviewResult(concurrentId))!;
+      assert.deepEqual(current.questions.map(q => q.prompt), ["Processo independente 1?", "Processo independente 2?"]);
+      const expectedRevision = current.questions[0]!.revision;
+      const conflicting = await Promise.all([child(1, { prompt: "Revisor A?", expectedRevision }), child(1, { prompt: "Revisor B?", expectedRevision })]);
+      assert.deepEqual(conflicting.map(item => JSON.parse(item.stdout.trim()).status).sort(), ["ReviewConflictError", "saved"]);
+      const conflict = await request(app).patch(`/documents/${concurrentId}/review/questions/${concurrentId}-q1`).send({ prompt: "Versão antiga", expectedRevision });
+      assert.equal(conflict.status, 409);
+      assert.equal(conflict.body.code, "REVIEW_CONFLICT");
+      assert.notEqual((await getReviewResult(concurrentId))!.questions[0]!.prompt, "Versão antiga");
+    });
+    await t.test("durable queue recovers a crashed worker, keeps partials and cancels across processes", async () => {
+      const previousModel = process.env.OLLAMA_MODEL;
+      process.env.OLLAMA_MODEL = "modelo-ficticio";
+      const run = () => promisify(execFile)(process.execPath, ["--import", "tsx", "test/helpers/distributed-process.ts", "worker"], { env: process.env, timeout: 15000 });
+      const waitingWorker = () => {
+        const child = spawn(process.execPath, ["--import", "tsx", "test/helpers/distributed-process.ts", "worker", "wait"], { env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+        let output = "";
+        const finished = new Promise<void>((resolve, reject) => { child.once("error", reject); child.once("exit", () => resolve()); });
+        const started = new Promise<void>((resolve, reject) => {
+          const deadline = setTimeout(() => { child.kill(); reject(new Error("Mock model did not start")); }, 10000);
+          child.stdout.on("data", chunk => { output += String(chunk); if (output.includes("model-started")) { clearTimeout(deadline); resolve(); } });
+          child.once("exit", () => { clearTimeout(deadline); if (!output.includes("model-started")) reject(new Error("Worker exited before the model started")); });
+        });
+        return { child, started, finished };
+      };
+      try {
+        const queued = await startClassification(concurrentId);
+        assert.equal(queued!.status, "queued");
+        assert.equal((await startClassification(concurrentId))!.sourceHash, queued!.sourceHash);
+        const crashed = waitingWorker();
+        try {
+          await crashed.started;
+          const blocked = await run();
+          assert.equal(blocked.stdout.includes("model-request"), false, "Global worker lock must prevent a second model request");
+        } finally { crashed.child.kill(); await crashed.finished; }
+        const job = (await getClassification(concurrentId))!;
+        job.suggestions = [{ questionIndex: 0, questionId: `${concurrentId}-q1`, discipline: "Matemática", area: "Matemática", questionType: "Objetiva", grade: "", topic: "Confirmado antes da queda", descriptor: "Somar números", difficulty: "easy" }];
+        job.nextIndex = 1;
+        await pool.query("UPDATE extrator.classification_jobs SET job=$2,lease_until=now()-interval '1 second' WHERE document_id=$1", [concurrentId, JSON.stringify(job)]);
+        const resumed = await run();
+        assert.equal(resumed.stdout.split("model-request").length - 1, 1);
+        const completed = (await getClassification(concurrentId))!;
+        assert.equal(completed.status, "completed"); assert.equal(completed.attempts, 2);
+        assert.equal(completed.suggestions[0]!.topic, "Confirmado antes da queda");
+        assert.equal(completed.suggestions.length, 2);
+        // Force a new input, then cancel from this process while the model runs in another.
+        await request(app).patch(`/documents/${concurrentId}/review/questions/${concurrentId}-q1`).send({ prompt: "Outra pergunta para cancelar?" }).expect(200);
+        await startClassification(concurrentId);
+        const cancelled = waitingWorker();
+        try { await cancelled.started; await cancelClassification(concurrentId); await cancelled.finished; }
+        finally { cancelled.child.kill(); }
+        assert.equal((await getClassification(concurrentId))!.status, "cancelled");
+        assert.equal((await pool.query("SELECT lease_until FROM extrator.classification_jobs WHERE document_id=$1", [concurrentId])).rows[0].lease_until, null);
+        await startClassification(concurrentId); await cancelClassification(concurrentId);
+        await run(); assert.equal((await getClassification(concurrentId))!.status, "cancelled");
+      } finally { if (previousModel === undefined) delete process.env.OLLAMA_MODEL; else process.env.OLLAMA_MODEL = previousModel; }
+    });
+    await t.test("assessment HTTP import is durable, idempotent, filtered and rejects conflicting imports", async () => {
+      const imported = await request(app).post("/assessments").send(assessmentFixture).expect(201);
+      const assessmentId = imported.body.id;
+      assert.equal(imported.body.results.summary.percentage, 33.33);
+      const duplicateAssessment = await request(app).post("/assessments").send(assessmentFixture).expect(200);
+      assert.equal(duplicateAssessment.body.id, assessmentId);
+      await request(app).post("/assessments").send({ ...assessmentFixture, title: "Dados diferentes" }).expect(409);
+      const storedAssessment = await request(app).get(`/assessments/${assessmentId}`).expect(200);
+      assert.equal(storedAssessment.body.results.students.length, 3);
+      assert.equal((await request(app).get("/assessments").query({ classId: assessmentFixture.classId, from: "2026-11-01", to: "2026-11-30" }).expect(200)).body.total, 1);
+      assert.equal((await request(app).get("/assessments").query({ schoolId: "outra-escola" }).expect(200)).body.total, 0);
+      await request(app).get("/assessments").query({ from: "2026-02-30" }).expect(400);
+      await request(app).get("/assessments").query({ page: 0 }).expect(400);
+      const invalidAssessment = structuredClone(assessmentFixture); invalidAssessment.questions[0]!.answerKey = "Z";
+      await request(app).post("/assessments").send(invalidAssessment).expect(400);
+    });
+    await deleteReviewResultFromDatabase(concurrentId);
+    const firstPage=await searchQuestionBank({pageSize:"1"}),secondPage=await searchQuestionBank({pageSize:"1",page:"2"});
+    assert.notEqual(firstPage.questions[0].id,secondPage.questions[0].id);assert.equal(secondPage.total,2);assert.equal((await searchQuestionBank({page:"3",pageSize:"1"})).questions.length,0);
+    const directory=await mkdtemp(join(tmpdir(),"mentary-bank-retention-"));
+    const previousRegistry=process.env.MENTARY_UPLOAD_REGISTRY, previousDocs=process.env.MENTARY_DOCUMENT_DIRECTORY;
+    process.env.MENTARY_UPLOAD_REGISTRY=join(directory,"manifest.json");process.env.MENTARY_DOCUMENT_DIRECTORY=join(directory,"documents");
+    try {
+      const old="2000-01-01T00:00:00.000Z";await mkdir(process.env.MENTARY_DOCUMENT_DIRECTORY,{recursive:true});
+      await writeFile(process.env.MENTARY_UPLOAD_REGISTRY,JSON.stringify([{...standalone.origin,uploadedAt:old},{...duplicate.origin,uploadedAt:old}]));
+      await writeFile(join(process.env.MENTARY_DOCUMENT_DIRECTORY,standaloneId+".pdf"),"fixture");await writeFile(join(process.env.MENTARY_DOCUMENT_DIRECTORY,duplicateId+".pdf"),"fixture");
+      assert.equal(await cleanupExpiredDocuments(),1);assert.ok(await getReviewResultFromDatabase(standaloneId));assert.equal(await getReviewResultFromDatabase(duplicateId),undefined);
+      assert.equal(JSON.parse(await readFile(process.env.MENTARY_UPLOAD_REGISTRY,"utf8")).length,1);
+    } finally {
+      if(previousRegistry===undefined)delete process.env.MENTARY_UPLOAD_REGISTRY;else process.env.MENTARY_UPLOAD_REGISTRY=previousRegistry;
+      if(previousDocs===undefined)delete process.env.MENTARY_DOCUMENT_DIRECTORY;else process.env.MENTARY_DOCUMENT_DIRECTORY=previousDocs;
+      assert.ok(directory.startsWith(join(tmpdir(),"mentary-bank-retention-")));await rm(directory,{recursive:true,force:true});
+    }
+
   } finally {
     await closeDatabase();
     process.env.DATABASE_URL = originalUrl;

@@ -4,16 +4,22 @@
   "description": "",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "node --env-file=../../.env --import tsx --watch src/server.ts",
+    "dev": "node --env-file=../../.env ./node_modules/tsx/dist/cli.mjs watch --ignore=./uploads/** --ignore=./public/** src/server.ts",
     "build": "tsc",
-    "test": "tsx --test test/*.test.ts",
-    "start": "node --env-file=../../.env dist/server.js"
+    "test": "node --import tsx --test --test-force-exit test/*.test.ts",
+    "start": "node --env-file=../../.env dist/server.js",
+    "benchmark:classification": "node --env-file-if-exists=../../.env ./node_modules/tsx/dist/cli.mjs scripts/benchmark-classification.ts",
+    "lint": "biome lint .",
+    "test:postgres": "node scripts/run-integration.mjs postgres",
+    "test:ocr": "node scripts/run-integration.mjs ocr",
+    "audit:source": "node scripts/audit-source.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "devDependencies": {
+    "@biomejs/biome": "^2.6.6",
     "@types/express": "^5.0.6",
     "@types/multer": "^2.2.0",
     "@types/node": "^26.5.1",

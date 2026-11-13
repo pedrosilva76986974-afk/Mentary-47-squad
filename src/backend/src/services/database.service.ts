@@ -27,6 +27,7 @@ async function initializeDatabase(): Promise<void> {
   initialization ??= (async () => {
     const connection = await getDatabasePool().connect();
     try {
+      await connection.query("SELECT pg_advisory_lock(471701)");
       await connection.query(`
         CREATE TABLE IF NOT EXISTS schema_migrations (
           version TEXT PRIMARY KEY,
@@ -38,6 +39,10 @@ async function initializeDatabase(): Promise<void> {
         "002_allow_duplicate_alternative_labels",
         "003_extrator_schema_and_mentary_export",
         "004_export_readiness",
+        "005_local_question_bank",
+        "006_unknown_source_page",
+        "007_bank_integrity",
+        "008_durable_jobs_and_assessments",
       ];
       for (const migrationVersion of migrationVersions) {
         const applied = await connection.query("SELECT version FROM schema_migrations WHERE version = $1", [migrationVersion]);
@@ -56,7 +61,11 @@ async function initializeDatabase(): Promise<void> {
         }
       }
     } finally {
-      connection.release();
+      try {
+        await connection.query("SELECT pg_advisory_unlock(471701)");
+      } finally {
+        connection.release();
+      }
     }
   })();
   try {

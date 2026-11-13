@@ -1,0 +1,24 @@
+{
+	"files": {
+		"includes": ["src/**"]
+	},
+	"formatter": {
+		"enabled": false
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"preset": "none",
+			"correctness": {
+				"noUnusedImports": "error",
+				"noUnusedVariables": "error",
+				"noUndeclaredVariables": "error",
+				"noUnreachable": "error"
+			},
+			"a11y": {
+				"useAltText": "error",
+				"useButtonType": "error"
+			}
+		}
+	}
+}

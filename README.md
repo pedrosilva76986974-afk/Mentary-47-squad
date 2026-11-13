@@ -84,7 +84,7 @@ A resposta esperada é:
 
 O endpoint `POST /documents` recebe o arquivo no campo `document`. Neste momento, são aceitos PDF, PNG e JPG/JPEG, com tamanho máximo de 20 MB. PDFs podem ter até 50 páginas. Para limitar o uso de memória durante OCR e análise por IA, a API processa um upload por vez; uploads simultâneos adicionais recebem HTTP 429 e podem ser reenviados quando o processamento atual terminar.
 
-Você pode selecionar um arquivo na tela em `http://localhost:3000` ou enviá-lo pelo PowerShell, substituindo o caminho pelo arquivo desejado:
+Durante o desenvolvimento, selecione o arquivo em `http://localhost:5173` (ou em `http://localhost:3000` após compilar os dois projetos). Também é possível enviá-lo pelo PowerShell, substituindo o caminho pelo arquivo desejado:
 
 ```powershell
 curl.exe -F "document=@C:\caminho\para\prova.pdf" http://localhost:3000/documents
@@ -94,7 +94,13 @@ O sistema confere extensão, tipo informado e conteúdo real do arquivo antes de
 
 As questões ficam disponíveis na tela de revisão logo após o envio. Também podem ser consultadas pela rota `GET /documents/{id}/review`, usando o `id` retornado pelo upload. A revisão permite editar enunciados e alternativas, registrar gabaritos e salvar o status de cada questão (`pending_review`, `approved` ou `rejected`) pela rota `PATCH /documents/{id}/review/questions/{questionId}`. Questões de múltipla escolha precisam de gabarito antes de serem aprovadas. A tela pode ser reaberta pelo link de revisão compartilhável. Se nenhum enunciado for identificado, o sistema informa isso, salva um resultado sem questões e disponibiliza o texto extraído para conferência. Se a extração falhar ou não produzir texto legível, a operação retorna erro e não cria um resultado de revisão.
 
-Os dados das revisões — texto extraído, questões, alternativas e alterações feitas pelo revisor — ficam no PostgreSQL. Os metadados de origem continuam em `src/backend/uploads/manifest.json` e os arquivos originais ficam em `src/backend/uploads/documents`; eles podem ser consultados pela rota `GET /documents/{id}/source`. O PostgreSQL e os arquivos precisam estar disponíveis para restaurar uma revisão completa. Por padrão, documentos e revisões com mais de 30 dias são removidos na inicialização e depois diariamente. Configure `MENTARY_RETENTION_DAYS` para outro prazo em dias ou use `0` para desativar a limpeza automática.
+Os dados das revisões — texto extraído, questões, alternativas e alterações feitas pelo revisor — ficam no PostgreSQL. Os metadados de origem continuam em `src/backend/uploads/manifest.json` e os arquivos originais ficam em `src/backend/uploads/documents`; eles podem ser consultados pela rota `GET /documents/{id}/source`. O PostgreSQL e os arquivos precisam estar disponíveis para restaurar uma revisão completa. Por padrão, documentos e revisões não publicados com mais de 30 dias são removidos na inicialização e depois diariamente. Documentos vinculados a publicações ativas são protegidos para preservar imagens e rastreabilidade. Configure `MENTARY_RETENTION_DAYS` para outro prazo em dias ou use `0` para desativar a limpeza automática.
+
+## Banco de questões próprio
+
+Abra **BANCO DE QUESTÕES** na navegação, ou /?bank=1. A tela pesquisa enunciados e combina filtros de disciplina, série, tema, BNCC, descritor e dificuldade. Os filtros pedagógicos comparam valores completos. Há paginação, consulta das origens e recortes visuais, seleção de até 100 questões e exportação da seleção em JSON. Uma seleção que deixou de estar publicada precisa ser atualizada antes da exportação.
+
+Páginas desconhecidas podem ser salvas sem inventar uma página. Na revisão, abra **Documento original e vínculo visual** para conferir o recorte estimado, ajustar página e coordenadas e salvar a associação. OCR ilegível ou limites ambíguos permanecem para revisão humana.
 
 ## Análise pedagógica com Ollama após a extração
 
@@ -104,16 +110,18 @@ Configure no ambiente do backend:
 
 ```env
 OLLAMA_BASE_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=qwen3.5:4b
-OLLAMA_TIMEOUT_MS=90000
+OLLAMA_MODEL=qwen3.5:2b
+OLLAMA_NUM_GPU=16
+OLLAMA_TARGET_MS=15000
+OLLAMA_TIMEOUT_MS=300000
 OLLAMA_KEEP_ALIVE=15m
 ```
 
-Baixe o modelo com `ollama pull qwen3.5:4b` e mantenha o Ollama aberto. `QUESTION_IDENTIFIER` não controla mais a análise: a extração é sempre local e a análise pedagógica é iniciada pela rota posterior.
+Baixe o modelo com `ollama pull qwen3.5:2b` e mantenha o Ollama aberto. `QUESTION_IDENTIFIER` não controla mais a análise: a extração é sempre local e a análise pedagógica é iniciada pela rota posterior.
 
-A IA sugere área do conhecimento, disciplina, tipo de questão, códigos BNCC e uma justificativa, com confiança declarada pelo próprio modelo. Os códigos são verificados quanto ao formato, sem consulta a catálogo oficial. Portanto, sua existência e pertinência precisam de conferência humana. Referência: [BNCC oficial](https://basenacionalcomum.mec.gov.br/).
+O modelo identifica disciplina, tema, descritor e dificuldade estimada, sem produzir resolução, justificativa ou nota de confiança. O backend define múltipla escolha e associa disciplinas conhecidas às áreas; áreas sem mapeamento ficam vazias para revisão. Ano/série só é preenchido quando informado. BNCC continua disponível somente para preenchimento manual ou futura integração oficial.
 
-Sugestões ficam separadas dos metadados confirmados. A tela permite copiar sugestões de confiança média/alta apenas para campos vazios; o revisor deve conferir e salvar a questão. Confiança baixa não permite cópia rápida. Área e tipo também podem ser editados manualmente. Texto, alternativas, gabarito e status não são modificados pela IA.
+Após a extração, a classificação roda em segundo plano, uma questão por chamada, com progresso salvo a cada resultado. Timeouts têm uma nova tentativa automática; ao tentar novamente após falha, o processamento retoma as questões pendentes do mesmo conteúdo/modelo. O status, o cancelamento e a tentativa manual ficam dentro de **Classificação pedagógica**. Conforme os resultados chegam, a tela preenche automaticamente os campos pedagógicos vazios, preservando os dados informados pelo revisor. Os valores permanecem como alterações não salvas até a confirmação em **Salvar alterações**. Todos os campos pedagógicos podem ser editados manualmente. Dificuldade é uma estimativa do modelo e deve ser conferida. Texto, alternativas, gabarito e status não são modificados pela IA. Resultados antigos são recalculados no novo formato.
 
 API posterior ao upload:
 
@@ -121,7 +129,23 @@ API posterior ao upload:
 - `GET /documents/{id}/classification`: retorna estado, sugestões e indicação de conteúdo alterado desde a análise.
 - Estados: `queued`, `running`, `completed`, `failed`. A tela permite tentar novamente após falha.
 
-A fila executa uma análise de cada vez em lotes de cinco questões, com até vinte documentos ativos. Resultados e estados são persistidos em `src/backend/uploads/classifications` (ou `MENTARY_CLASSIFICATION_DIRECTORY`). Esse diretório precisa ser incluído no backup junto aos uploads. Processos interrompidos são sinalizados ao consultar a análise e podem ser repetidos; a fila não retoma sozinha após reinício. Esta implementação é para uma instância do backend, sem coordenação entre vários servidores. Falhas da IA não impedem upload nem revisão. O processamento local ainda compete pelos recursos da máquina enquanto a IA está ativa.
+A fila executa uma análise de cada vez, com uma questão por chamada e até vinte documentos ativos. Resultados e estados são persistidos em `src/backend/uploads/classifications` (ou `MENTARY_CLASSIFICATION_DIRECTORY`). Esse diretório precisa ser incluído no backup junto aos uploads. Processos interrompidos são sinalizados ao consultar a análise e podem ser repetidos; a fila não retoma sozinha após reinício. Esta implementação é para uma instância do backend, sem coordenação entre vários servidores. Falhas da IA não impedem upload nem revisão. O processamento local ainda compete pelos recursos da máquina enquanto a IA está ativa.
+
+## Meta de desempenho da classificação
+
+A meta é **até 15 segundos por questão**, da chamada local ao Ollama até o JSON validado. Não é um timeout de 15 segundos nem uma garantia de atendimento. Espera na fila e até dois segundos de consulta da tela ficam fora dessa medida. O carregamento inicial é registrado no aquecimento do benchmark e pode afetar o primeiro resultado na aplicação.
+
+O perfil usa contexto de 2048 tokens, saída reduzida de até 192 tokens por questão e descrições curtas. Trechos são limitados apenas na entrada da IA; o texto extraído original é preservado. A tela mostra o tempo medido e se ficou dentro da meta.
+
+O ajuste de 16 camadas na GPU foi medido neste Dell G15 para deixar memória livre. Em outro computador, compare com o modo automático removendo OLLAMA_NUM_GPU. É uma configuração de hardware, não uma garantia universal de velocidade. O modelo continua local; nenhuma chave de API é necessária.
+
+Para comparar modelos já instalados, execute em `src/backend`:
+
+```powershell
+npm run benchmark:classification -- qwen3.5:2b
+```
+
+O benchmark faz aquecimento e testa cinco exemplos sintéticos de Matemática, História, Português, Biologia e Informática. Salva os resultados em `docs/benchmarks` e retorna erro se algum exemplo ultrapassar a meta ou falhar na verificação básica dos campos. A amostra é pequena e não comprova precisão em todos os documentos. Tema, descritor e dificuldade ainda precisam de revisão humana. `OLLAMA_TARGET_MS` configura a meta registrada pela API; o benchmark deste piloto usa 15000 ms.
 
 ## Compilar e verificar o projeto
 
@@ -166,7 +190,7 @@ As histórias e seus requisitos estão em `docs/HistoriasUsuarios.markdown`. A p
 
 Durante o upload, use **Cancelar envio e processamento** para abortar a requisição. O backend detecta a desconexão e propaga o cancelamento entre etapas e páginas, cancela a renderização e termina o worker OCR ativo. Validação, tarefas nativas curtas e operações de armazenamento já iniciadas podem terminar antes de o cancelamento ser observado; registros criados por uma solicitação cancelada são desfeitos quando detectados antes da resposta.
 
-Na revisão, **Cancelar análise da IA** chama `POST /documents/{id}/classification/cancel`. A fila persiste `cancelled`, aborta o fetch ativo e não inicia novos lotes. Resultados de lotes já concluídos permanecem como parciais; é possível tentar novamente. Cancelar novamente é idempotente, e análises concluídas não viram canceladas. Fechar a revisão só interrompe o acompanhamento, mantendo a tarefa em segundo plano. Abortar o HTTP não garante descarregamento imediato do modelo da GPU.
+Na revisão, **Cancelar classificação** chama `POST /documents/{id}/classification/cancel`. A fila persiste `cancelled`, aborta o fetch ativo e não inicia novos lotes. Resultados de lotes já concluídos permanecem como parciais; é possível tentar novamente. Cancelar novamente é idempotente, e análises concluídas não viram canceladas. Fechar a revisão só interrompe o acompanhamento, mantendo a tarefa em segundo plano. Abortar o HTTP não garante descarregamento imediato do modelo da GPU.
 
 Documentos sem questões não iniciam análise pedagógica. A extração/OCR ainda precisa ler o arquivo para determinar se há candidatos; essa etapa pode ser cancelada pelo usuário.
 
@@ -187,3 +211,28 @@ Remove-Item Env:MENTARY_POSTGRES_TEST
 ```
 
 O teste exige permissão para criar um banco temporário. Ele cria um nome aleatório, valida migrações, persistência, rollback e a view de exportação, e remove somente esse banco de teste ao terminar. A suíte comum ignora esse teste quando `MENTARY_POSTGRES_TEST` não está ativado. O teste não publica questões em `public.questions`.
+
+## Verificações automáticas e documentação
+
+Backend: npm run lint, npm run build, npm test, npm run test:postgres e npm run test:ocr. Frontend: npm run lint e npm run build. Execute os comandos em suas respectivas pastas. Os testes PostgreSQL usam uma base temporária isolada; não apagam o banco da aplicação. OCR real pode baixar dados públicos do idioma português no primeiro uso.
+
+O workflow .github/workflows/ci.yml executa lint, builds, testes gerais, PostgreSQL isolado e OCR real em pushes e Pull Requests. A execução remota deve ser conferida no GitHub; configuração do workflow não comprova uma execução aprovada. Lint verifica importações/variáveis não usadas, referências não declaradas, código inalcançável e regras básicas de imagem/botão; não substitui typecheck nem testes.
+
+- [Contrato e migrações do banco](database/README.md)
+- [Diagrama de classes](docs/DIAGRAMA-DE-CLASSES.md)
+- [Catálogo de bugs](docs/CATALOGO-DE-BUGS.md)
+- [Testes de tela](docs/TESTES-DE-TELA.md)
+- [Auditoria das issues e backlog de avaliações](docs/AUDITORIA-ISSUES.md)
+- [Guia do código: módulos, API e manutenção](docs/GUIA-DO-CODIGO.md)
+- [Revisão técnica e pendências](docs/REVISAO-CODIGO.md)
+- [Avaliações, dashboards e contrato de integração](docs/AVALIACOES-E-INTEGRACAO.md)
+- [Exemplo fictício de aplicação](docs/EXEMPLO-AVALIACAO.json)
+- [Protocolo de homologação com professores](docs/PROTOCOLO-HOMOLOGACAO.md)
+
+## Avaliações e recuperação de trabalho
+
+O menu **AVALIAÇÕES** recebe aplicações em JSON e apresenta correção, indicadores por estudante/questão/BNCC/descritor, filtros e comparação de duas aplicações. Exige PostgreSQL. Os dados de exemplo não são cadastrados automaticamente. Login e permissões serão fornecidos pelo sistema principal.
+
+Na revisão, habilite **Guardar rascunhos neste navegador por até 7 dias** para oferecer recuperação após recarga. Questões alteradas em outra sessão geram conflito de versão; a versão antiga não é restaurada automaticamente.
+
+Com PostgreSQL, a fila da IA passa a persistir tarefas e retomar trabalho após queda do servidor. A migração 008 é aplicada na inicialização. Consulte o guia de integração para os limites do modo por arquivos e os requisitos de armazenamento dos documentos entre servidores.

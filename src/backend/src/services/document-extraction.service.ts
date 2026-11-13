@@ -1,7 +1,11 @@
+import { detectVisualReference } from "./visual-detection.service.js";
+import { assertRenderSize } from "./canvas-limits.service.js";
+import { locateQuestionRegions, type QuestionRegion, type PositionedText } from "./question-regions.service.js";
+import type { Region } from "./source-preview.service.js";
 import { createCanvas } from "@napi-rs/canvas";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import { MAX_PDF_PAGES, standardFontDataUrl } from "./pdf-config.js";
-import { recognizeImage } from "./ocr.service.js";
+import { recognizeImageWithLayout } from "./ocr.service.js";
 import { abortable } from "./cancellation.js";
 
 const MIN_DIGITAL_TEXT_LENGTH = 40;
@@ -12,11 +16,12 @@ type ExtractionResult = {
   pages: number;
   method: "pdf-text" | "ocr" | "hybrid";
   visualPages?: VisualPageReference[];
+  questionRegions?: QuestionRegion[];
 };
 
-type VisualPageReference = { page: number; kind: "image" | "graphic" };
+type VisualPageReference = { page: number; kind: "image" | "graphic"; region?: Region; association?: "automatic" | "manual" | "unconfirmed"; extractionWarning?: string };
 
-type ImageRecognizer = (image: Buffer, signal?: AbortSignal) => Promise<string>;
+type ImageRecognizer = (image: Buffer, signal?: AbortSignal) => Promise<string | { text: string; lines: PositionedText[] }>;
 
 type PdfTextItem = { str: string; hasEOL?: boolean; transform?: number[]; width?: number; height?: number };
 type PositionedLine = { text: string; y: number; left: number; right: number };
@@ -198,22 +203,6 @@ function hasBrokenTextLayer(text: string): boolean {
   return replacementCharacters >= 2 || suspiciousSequences >= 1;
 }
 
-async function detectPageVisuals(page: pdfjs.PDFPageProxy): Promise<VisualPageReference["kind"] | undefined> {
-  const { fnArray } = await page.getOperatorList();
-  const imageOperators = new Set<number>([
-    pdfjs.OPS.paintImageXObject,
-    pdfjs.OPS.paintImageXObjectRepeat,
-    pdfjs.OPS.paintInlineImageXObject,
-    pdfjs.OPS.paintInlineImageXObjectGroup,
-    pdfjs.OPS.paintImageMaskXObject,
-    pdfjs.OPS.paintImageMaskXObjectGroup,
-  ]);
-  if (fnArray.some((operation) => imageOperators.has(operation))) return "image";
-
-  const pathCount = fnArray.filter((operation) => operation === pdfjs.OPS.constructPath).length;
-  return pathCount >= 3 ? "graphic" : undefined;
-}
-
 async function extractPdf(buffer: Buffer, recognize: ImageRecognizer, signal?: AbortSignal): Promise<ExtractionResult> {
   signal?.throwIfAborted();
   const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer), standardFontDataUrl });
@@ -233,11 +222,12 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer, signal?: A
       const content = await page.getTextContent();
       const [xMin, yMin, xMax, yMax] = page.view;
       pageContents.push({ items: content.items, width: xMax - xMin, height: yMax - yMin, yMin });
-      const visualKind = await detectPageVisuals(page);
-      if (visualKind) visualPages.push({ page: pageNumber, kind: visualKind });
+      const visualReference = await detectVisualReference(page, pageNumber, signal);
+      if (visualReference) visualPages.push(visualReference);
     }
     const repeatedArtifacts = findRepeatedPageArtifacts(pageContents);
     const pageTexts: string[] = [];
+    const questionRegions: QuestionRegion[] = [];
     let digitalPageCount = 0;
     let ocrPageCount = 0;
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
@@ -246,12 +236,15 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer, signal?: A
       const { items, width } = pageContents[pageNumber - 1]!;
       const digitalPageText = groupPageText(items, width, repeatedArtifacts);
       if (!hasBrokenTextLayer(digitalPageText)) {
+        const meta = pageContents[pageNumber - 1]!;
+        questionRegions.push(...locateQuestionRegions(getPositionedLines(items, width, repeatedArtifacts).map(line => ({ text: line.text, x: line.left / width, y: 1 - (line.y - meta.yMin) / meta.height, width: (line.right-line.left)/width, height: .015 })), pageNumber));
         pageTexts.push(digitalPageText);
         digitalPageCount += 1;
         continue;
       }
 
       const viewport = page.getViewport({ scale: 1.6 });
+      assertRenderSize(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const context = canvas.getContext("2d");
       const render = page.render({ canvas: canvas as never, canvasContext: context as never, viewport });
@@ -260,13 +253,15 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer, signal?: A
       try { await abortable(render.promise, signal); }
       finally { signal?.removeEventListener("abort", cancelRender); }
       signal?.throwIfAborted();
-      const imageText = (await abortable(recognize(canvas.toBuffer("image/png"), signal), signal)).trim();
+      const recognition = await abortable(recognize(canvas.toBuffer("image/png"), signal), signal);
+      const imageText = (typeof recognition === "string" ? recognition : recognition.text).trim();
+      if (typeof recognition !== "string") questionRegions.push(...locateQuestionRegions(recognition.lines, pageNumber));
       pageTexts.push(imageText || digitalPageText);
       ocrPageCount += 1;
     }
 
     const method = ocrPageCount === 0 ? "pdf-text" : digitalPageCount === 0 ? "ocr" : "hybrid";
-    return { text: pageTexts.filter(Boolean).join("\n\n"), pageTexts, pages: pdf.numPages, method, visualPages };
+    return { text: pageTexts.filter(Boolean).join("\n\n"), pageTexts, pages: pdf.numPages, method, visualPages, questionRegions };
   } finally {
     await loadingTask.destroy();
   }
@@ -275,13 +270,14 @@ async function extractPdf(buffer: Buffer, recognize: ImageRecognizer, signal?: A
 async function extractDocument(
   buffer: Buffer,
   mimeType: string,
-  recognize: ImageRecognizer = recognizeImage,
+  recognize: ImageRecognizer = recognizeImageWithLayout,
   signal?: AbortSignal,
 ): Promise<ExtractionResult> {
   signal?.throwIfAborted();
   if (mimeType === "application/pdf") return extractPdf(buffer, recognize, signal);
-  const text = await abortable(recognize(buffer, signal), signal);
-  return { text, pageTexts: [text], pages: 1, method: "ocr", visualPages: [{ page: 1, kind: "image" }] };
+  const recognition = await abortable(recognize(buffer, signal), signal);
+  const text = typeof recognition === "string" ? recognition : recognition.text;
+  return { text, pageTexts: [text], pages: 1, method: "ocr", visualPages: [{ page: 1, kind: "image" }], ...(typeof recognition !== "string" ? { questionRegions: locateQuestionRegions(recognition.lines, 1) } : {}) };
 }
 
 export { extractDocument, groupPageText };

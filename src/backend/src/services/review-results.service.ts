@@ -1,3 +1,9 @@
+import { regionMatchesQuestion } from "./question-regions.service.js";
+import { createHash } from "node:crypto";
+import { ReviewConflictError } from "./review-conflict.js";
+import { hasAlternativeLabelGaps } from "./question-alternatives.service.js";
+import { withDocumentLock } from "./document-lock.service.js";
+import { validateRegion } from "./source-preview.service.js";
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { DocumentOrigin } from "./document-origin.service.js";
@@ -15,6 +21,7 @@ import {
 } from "./postgres-review.service.js";
 
 type ReviewQuestion = ParsedQuestion & {
+  revision?: string;
   id: string;
   status: "pending_review" | "approved" | "rejected";
   answerKey?: string | null;
@@ -35,8 +42,8 @@ type ReviewQuestion = ParsedQuestion & {
 };
 
 type ReviewQuestionUpdate = Partial<Pick<ReviewQuestion,
-  "prompt" | "answerKey" | "alternatives" | "status" | "pedagogy" | "reviewedBy"
->>;
+  "prompt" | "answerKey" | "alternatives" | "status" | "pedagogy" | "reviewedBy" | "pageStart" | "pageEnd" | "visualReferences"
+>> & { expectedRevision?: string };
 
 type PedagogyMetadata = NonNullable<ReviewQuestion["pedagogy"]>;
 
@@ -57,21 +64,30 @@ function findQuestionVisualReferences(
   question: Pick<ReviewQuestion, "pageStart" | "pageEnd">,
   visualPages: VisualPageReference[] = [],
 ): VisualPageReference[] {
-  return visualPages.filter(({ page }) => page >= question.pageStart && page <= question.pageEnd);
+  if (question.pageStart === null || question.pageEnd === null) return [];
+  return visualPages.filter(({ page }) => page >= question.pageStart! && page <= question.pageEnd!);
 }
 
 function reviewDirectory(): string {
   return process.env.MENTARY_REVIEW_DIRECTORY ?? resolve(process.cwd(), "uploads", "reviews");
 }
 
+function canonicalContent(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalContent);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).filter(([key, item]) => key !== "revision" && item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonicalContent(item)]));
+  return value;
+}
+
 function normalizeReviewResult(review: ReviewResult): ReviewResult {
   review.questions = review.questions.map((question) => {
     delete (question as ReviewQuestion & { answer?: unknown }).answer;
     question.responseType = "multiple_choice";
+    if (question.pageStart == null || question.pageEnd == null) { question.pageStart = null; question.pageEnd = null; }
     const missingComponents = new Set(question.missingComponents ?? []);
     if (question.prompt?.trim()) missingComponents.delete("prompt");
     else missingComponents.add("prompt");
-    if ((question.alternatives?.length ?? 0) >= 2) missingComponents.delete("alternatives");
+    if ((question.alternatives?.length ?? 0) >= 2 && question.alternatives!.every(a=>a.label.trim()&&a.text.trim()) && new Set(question.alternatives!.map(a=>a.label.trim().toUpperCase())).size===question.alternatives!.length
+      && (question.status === "approved" || !hasAlternativeLabelGaps(question.alternatives!))) missingComponents.delete("alternatives");
     else missingComponents.add("alternatives");
     const answerKey = question.answerKey?.trim().toLocaleUpperCase("pt-BR");
     if (answerKey && question.alternatives?.some((alternative) => alternative.label.trim().toLocaleUpperCase("pt-BR") === answerKey)) {
@@ -80,6 +96,7 @@ function normalizeReviewResult(review: ReviewResult): ReviewResult {
       missingComponents.add("answer");
     }
     question.missingComponents = [...missingComponents];
+    question.revision = createHash("sha256").update(JSON.stringify(canonicalContent({ id: question.id, prompt: question.prompt ?? question.text, alternatives: question.alternatives ?? [], answerKey: question.answerKey ?? null, pedagogy: question.pedagogy ?? {}, reviewedBy: question.reviewedBy ?? "", status: question.status, pageStart: question.pageStart, pageEnd: question.pageEnd, visualReferences: question.visualReferences ?? [] }))).digest("hex");
     return question;
   });
   return review;
@@ -96,8 +113,16 @@ async function saveReviewResult(
     throw new DocumentProcessingError("Não foi possível reconhecer texto no documento. Verifique a qualidade do arquivo e tente novamente.");
   }
 
+  const matchedRegions = (extraction.questionRegions ?? []).filter(region => parsedQuestions.some(question =>
+    question.pageStart !== null && question.pageEnd !== null && region.page >= question.pageStart && region.page <= question.pageEnd && regionMatchesQuestion(region,question)));
   const questions: ReviewQuestion[] = parsedQuestions.map((question, index) => {
-    const visualReferences = findQuestionVisualReferences(question, extraction.visualPages);
+    const visualReferences = findQuestionVisualReferences(question, extraction.visualPages).map(reference => {
+      const regions = matchedRegions.filter(region => region.page === reference.page && regionMatchesQuestion(region, question));
+      if (regions.length !== 1 || reference.extractionWarning) return { ...reference, association: "unconfirmed" as const };
+      const current = regions[0]!;
+      const next = matchedRegions.filter(candidate => candidate.page === current.page && candidate.region.x === current.region.x && candidate.region.y > current.region.y + .005).sort((a,b)=>a.region.y-b.region.y)[0];
+      return { ...reference, region: { ...current.region, height: (next?.region.y ?? 1) - current.region.y }, association: "automatic" as const };
+    });
     return {
       ...question,
       id: `${origin.id}-q${index + 1}`,
@@ -121,6 +146,7 @@ async function saveReviewResult(
     questions,
   };
 
+  normalizeReviewResult(result);
   if (isDatabaseConfigured()) {
     await initializeDatabase();
     await saveReviewResultToDatabase(result);
@@ -160,6 +186,14 @@ async function updateReviewQuestion(
   questionId: string,
   update: ReviewQuestionUpdate,
 ): Promise<ReviewResult | undefined> {
+  return withDocumentLock(documentId, () => updateReviewQuestionUnlocked(documentId, questionId, update));
+}
+
+async function updateReviewQuestionUnlocked(
+  documentId: string,
+  questionId: string,
+  update: ReviewQuestionUpdate,
+): Promise<ReviewResult | undefined> {
   const review = await getReviewResult(documentId);
   if (!review) return undefined;
   const questionIndex = review.questions.findIndex((question) => question.id === questionId);
@@ -169,6 +203,28 @@ async function updateReviewQuestion(
   }
 
   const question = { ...review.questions[questionIndex]! };
+  if (update.expectedRevision !== undefined && update.expectedRevision !== question.revision) throw new ReviewConflictError();
+  if ("pageStart" in update || "pageEnd" in update) {
+    const start = update.pageStart, end = update.pageEnd;
+    if (!(start === null && end === null) && (!Number.isInteger(start) || !Number.isInteger(end) || Number(start) < 1 || Number(end) < Number(start) || Number(end) > review.pages)) throw new DocumentValidationError("Informe as duas páginas válidas ou marque a página como desconhecida.");
+    question.pageStart = start!; question.pageEnd = end!;
+  }
+  if ("visualReferences" in update) {
+    if (!Array.isArray(update.visualReferences) || update.visualReferences.length > 20) throw new DocumentValidationError("Referências visuais inválidas.");
+    question.visualReferences = update.visualReferences.map(value => {
+      if (!value || !Number.isInteger(value.page) || value.page < 1 || value.page > review.pages || !["image","graphic"].includes(value.kind)) throw new DocumentValidationError("Página do elemento visual inválida.");
+      if (value.region) validateRegion(value.region);
+      const original = question.visualReferences?.find(reference => reference.page === value.page
+        && reference.kind === value.kind && JSON.stringify(reference.region ?? null) === JSON.stringify(value.region ?? null));
+      const confirmed = value.association === "manual" && Boolean(value.region);
+      return {
+        page: value.page, kind: value.kind, ...(value.region ? { region: value.region } : {}),
+        association: confirmed || !original ? "manual" as const : original.association ?? "unconfirmed" as const,
+        ...(!confirmed && original?.extractionWarning ? { extractionWarning: original.extractionWarning } : {}),
+      };
+    });
+  }
+
   if ("prompt" in update) {
     if (typeof update.prompt !== "string" || !update.prompt.trim()) throw new DocumentValidationError("O enunciado não pode ficar vazio.");
     question.prompt = update.prompt.trim();
@@ -253,19 +309,8 @@ async function updateReviewQuestion(
     question.pedagogy = pedagogy;
   }
 
-  const missingComponents = new Set(question.missingComponents ?? []);
-  if (question.prompt?.trim()) missingComponents.delete("prompt");
-  else missingComponents.add("prompt");
-  if ((question.alternatives?.length ?? 0) < 2) missingComponents.add("alternatives");
-  else missingComponents.delete("alternatives");
-  const normalizedAnswerKey = question.answerKey?.trim().toLocaleUpperCase("pt-BR");
-  const hasValidAnswerKey = Boolean(normalizedAnswerKey
-    && question.alternatives?.some((alternative) => alternative.label.trim().toLocaleUpperCase("pt-BR") === normalizedAnswerKey));
-  if (hasValidAnswerKey) missingComponents.delete("answer");
-  else missingComponents.add("answer");
-  question.missingComponents = [...missingComponents];
-
   review.questions[questionIndex] = question;
+  normalizeReviewResult(review);
   if (isDatabaseConfigured()) {
     await saveReviewResultToDatabase(review);
   } else {
@@ -304,4 +349,4 @@ async function removeReviewResult(documentId: string): Promise<void> {
 }
 
 export { findQuestionVisualReferences, getReviewResult, migrateLegacyReviewFiles, removeReviewResult, saveReviewResult, updateReviewQuestion };
-export type { ReviewQuestion, ReviewQuestionUpdate, ReviewResult };
+export type { ReviewQuestion, ReviewResult };

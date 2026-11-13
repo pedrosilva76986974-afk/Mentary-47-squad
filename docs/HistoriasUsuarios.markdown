@@ -147,7 +147,9 @@ Critérios de aceitação:
 - Deve permitir filtrar por dificuldade.
 - Deve apresentar as questões correspondentes.
 
-HU13 — Receber dados da avaliação
+Módulo 2 — Avaliações e inteligência avaliativa (backlog futuro)
+
+US13 — Receber dados da avaliação
 
 Requisito: RF13 — O sistema deve receber os dados da aplicação.
 
@@ -163,9 +165,9 @@ Deve receber as respostas dos estudantes.
 Deve identificar a turma e a aplicação.
 Deve registrar a data da aplicação.
 Deve armazenar os dados recebidos.
-Módulo 3 — Inteligência Avaliativa
 
-HU14 — Processar respostas
+
+US14 — Processar respostas
 
 Requisito: RF14 — O sistema deve processar as respostas.
 
@@ -181,7 +183,7 @@ Deve identificar questões não respondidas.
 Deve utilizar o gabarito registrado.
 Deve armazenar os resultados processados.
 
-HU15 — Calcular desempenho
+US15 — Calcular desempenho
 
 Requisito: RF15 — O sistema deve calcular desempenho em diferentes dimensões.
 
@@ -198,7 +200,7 @@ Deve permitir analisar por habilidade BNCC.
 Deve permitir analisar por descritor.
 Deve armazenar o histórico dos resultados.
 
-HU16 — Consultar dashboard
+US16 — Consultar dashboard
 
 Requisito: RF16 — O sistema deve disponibilizar dashboards por perfil.
 
@@ -214,7 +216,7 @@ Deve apresentar os dados de acordo com o perfil do usuário.
 Deve permitir visualizar informações de estudantes, turmas ou escolas conforme a permissão.
 Deve apresentar os resultados de forma visual.
 
-HU17 — Gerar relatório por descritor
+US17 — Gerar relatório por descritor
 
 Requisito: RF17 — O sistema deve gerar relatórios por descritor e habilidade.
 
@@ -232,7 +234,7 @@ Deve apresentar o tempo médio de resposta quando disponível.
 Deve permitir comparar resultados.
 Deve apresentar o nível de atenção configurado.
 
-HU18 — Comparar resultados
+US18 — Comparar resultados
 
 Requisito: RF18 — O sistema deve permitir comparar classes e aplicações.
 
@@ -248,7 +250,7 @@ Deve permitir comparar desempenho.
 Deve permitir comparar habilidades e descritores.
 Deve apresentar a evolução quando houver histórico disponível.
 
-HU19 — Identificar lacunas de aprendizagem
+US19 — Identificar lacunas de aprendizagem
 
 Requisito: RF19 — O sistema deve identificar lacunas de aprendizagem.
 
@@ -265,7 +267,7 @@ Deve classificar os resultados conforme os níveis de atenção configurados.
 Deve apresentar as lacunas identificadas.
 Deve permitir consultar os dados que originaram a identificação.
 
-HU20 — Analisar qualidade das questões
+US20 — Analisar qualidade das questões
 
 Requisito: RF20 — O sistema deve realizar análise básica da qualidade das questões.
 

@@ -1,4 +1,43 @@
+# Histórico de implementação
+
+O estado consolidado das issues está em [AUDITORIA-ISSUES.md](AUDITORIA-ISSUES.md). Os registros abaixo são históricos; pendências antigas podem ter sido substituídas pelas entregas posteriores.
+
+## Banco próprio e seis frentes — 07/11/2026
+
+A dependência do banco externo Mentary foi retirada do fluxo de publicação. As migrations 005–007 criam banco.questions e banco.question_sources no PostgreSQL local, mantendo extrator para revisão e o legado intacto. Aprovar publica na mesma transação; pendentes/rejeitadas não aparecem na consulta. Reabrir retira aquela origem ativa. Duplicatas exatas normalizadas compartilham a questão e preservam todas as origens. Equivalência semântica, paráfrases e alternativas reordenadas ainda exigem conferência humana. O bloqueio histórico da #17 descrito abaixo foi substituído por esta implementação autorizada de banco próprio.
+
+Frentes entregues: publicação/deduplicação (#17); consulta, sete filtros combináveis, paginação, seleção e exportação JSON (#18); recortes visuais automáticos por posição e ajuste manual (#10); página desconhecida persistida sem inventar número (#11); corpus automatizado de OCR real em PNG/JPEG/PDF escaneado, incluindo correção contextual de marcador AJ; documentação, diagrama (#24), catálogo de bugs, lint e CI. A retenção protege documentos com publicação ativa. BNCC continua manual e não bloqueia publicação.
+
+Validação de uso simulada em navegador: duas questões do PDF fictício teste-banco-proprio-simulado.pdf, aprovação/publicação, recorte, página desconhecida, filtros combinados, seleção/exportação e rejeição de seleção desatualizada após reabrir uma questão. Tela de 390 px sem transbordamento horizontal; foco de teclado verificado. Não houve participantes humanos. A correção do proxy /questions resolveu resposta HTML na consulta; a seleção exibida é limpa quando a API detecta retirada de questão.
+
+Validação automatizada: suíte geral com 115 testes (113 aprovados e duas integrações optativas ignoradas); PostgreSQL isolado e OCR real executados separadamente. Lint e builds em ambos os módulos. Auditoria das dependências sem vulnerabilidades conhecidas após atualizações compatíveis. CI adicionada; execução remota só deve ser considerada aprovada após consulta ao GitHub Actions.
+
+Limites: associação visual automática depende de âncoras e layout identificáveis; ambiguidades ficam disponíveis para ajuste manual. Corpus é sintético e pequeno, não comprova precisão universal. Não inclui geração de avaliação formatada, integração com catálogo oficial BNCC, autenticação multiusuário nem painel pedagógico. Consulte database/README.md, docs/DIAGRAMA-DE-CLASSES.md, docs/CATALOGO-DE-BUGS.md e docs/TESTES-DE-TELA.md.
 # Ciclos de desenvolvimento — 04/11/2026
+
+## Editor por componentes — 07/11/2026
+
+Substituído o textarea com sintaxe `rótulo | texto` por componente de edição estruturada. Categorias: 01 Enunciado, 02 Alternativas, 03 Gabarito/revisão e 04 Classificação pedagógica. Alternativas possuem campos próprios e botões para inclusão/remoção; o gabarito acompanha mudança de rótulo e é limpo quando sua opção é removida. Nenhuma alternativa restante é renumerada automaticamente. Alterações são locais até salvar e ficam sinalizadas. Validado em navegador com revisão fictícia, teclado e tela de 390 px. A identidade Mentary foi mantida.
+
+## Reorganização UI/UX — 07/11/2026
+
+Após o upload, a apresentação institucional dá lugar à área de revisão. Marca, roxo, azul e verde Mentary foram preservados. Cabeçalho mostra documento e contadores de status; análise IA e detalhes técnicos ficam recolhidos. Conteúdo, fonte e edição textual ficam à esquerda em desktop; decisões de revisão, gabarito, classificação e ações ficam no painel direito. Até 1000 px os painéis passam para uma coluna. O formulário de novo envio abre por ação explícita, sem ocupar permanentemente o topo da revisão. Mensagens de salvamento aparecem no contexto da revisão, sem duplicação no formulário escondido.
+
+Homologação real no navegador: navegação à questão 2 do documento fictício, seleção de gabarito, edição de responsável e área, salvamento confirmado, abertura/fechamento do novo envio e foco por Tab. Conferidos 1366 px (duas colunas) e 390 px (uma coluna), sem transbordamento horizontal. Cabeçalho principal H1 e foco visível confirmados. Dados editados pertencem exclusivamente à revisão fictícia de teste. Não houve teste com participantes humanos.
+
+## Interface e testes de uso simulados — 07/11/2026
+
+A #4 foi confirmada como atendida pelo responsável no GitHub; não permanece como bloqueio desta execução.
+
+Reorganizada a revisão com um cartão por vez, navegação entre questões, sugestões da IA dentro do cartão correspondente, editor recolhível e diagnóstico técnico sob demanda. Corrigidos o total undefined ao reabrir revisões e onze handlers que liam event.currentTarget dentro de atualizadores adiados do React, causando tela em branco ao editar. Valores dos eventos são capturados antes de atualizar o estado.
+
+Foram executados testes reais na tela com dados fictícios, incluindo aprovação bloqueada, gabarito, responsável, aprovação/reabertura, navegação, foco e cancelamento da IA em 390 px. Evidências textuais e limites em docs/TESTES-DE-TELA.md. Não se trata de teste com usuários humanos. A inicialização da análise foi ajustada para consultar o estado existente antes de iniciar uma nova tarefa; reabrir uma revisão cancelada não deve reiniciá-la automaticamente.
+
+O teste revelou reinícios do backend por monitoramento de arquivos gerados. Substituído o watcher nativo pelo watcher do tsx com exclusão de uploads/public; repetido o cenário de aprovação com sucesso.
+
+Verificação final: 94 testes gerais passaram, zero falhas e um teste PostgreSQL optativo ignorado na suíte comum; esse teste foi executado separadamente em banco isolado e passou. Build/typecheck frontend passou. Cancelamento ao reabrir foi confirmado também na tela. Lint dedicado permanece uma pendência; checagem de espaços do Git é distinta de lint.
+
+Próxima etapa #17 bloqueada pela ausência do SQL oficial do destino public.questions. Solicitado ao responsável o link da migration. A #18 depende da definição dos registros publicados; não foi implementada uma consulta que fingisse publicar dados no banco definitivo. A view de preparação existente não é equivalente à publicação. Nenhuma tabela de referência foi inventada ou substituída.
 
 ## Cancelamento de upload e IA — issue #23 — 06/11/2026
 
@@ -125,3 +164,120 @@ A opção `--test-force-exit` encerra o processo após os testes. Não foi demon
 6. **Infraestrutura:** configurar lint dedicado, identificar recursos que mantêm os testes abertos e acrescentar testes reais de migração/persistência em banco isolado.
 
 Nenhum deploy, alteração de credenciais, reset de banco ou remoção de dados de usuário foi realizado.
+
+## 2026-11-07 — Classificação pedagógica direta
+
+- Ollama retorna somente área, disciplina, tipo e BNCC, sem justificativa, resolução ou confiança. Pensamento desativado e saída limitada.
+- Classificação continua após a extração, em segundo plano. A tela preenche os campos vazios sem substituir dados humanos; salvar confirma os valores.
+- Cache versionado para recalcular respostas do formato anterior.
+- Validação: 98 testes, 97 passaram, 1 integração PostgreSQL ignorada pelo controle opcional; zero falhas. A primeira execução restrita encontrou impedimentos de arquivos/conexões; a execução com acesso local passou.
+- Teste real com qwen3.5:4b retornou os campos esperados em aproximadamente 15 segundos para um exemplo. Não representa garantia de latência nem de acurácia BNCC.
+- Tela validada com documento simulado: classificação concluída, campos preenchidos, alterações não salvas sinalizadas e gabarito/status preservados. Não houve estudo com usuários humanos.
+- Limitação: validação BNCC verifica formato, não existência ou pertinência em catálogo oficial.
+
+## 2026-11-07 — Ficha pedagógica e edição compacta
+
+- Alternativas editáveis com letra e texto na mesma linha, bordas discretas, remoção e inclusão; rótulos acessíveis e foco visível preservados.
+- Classificação v3 preenche área, disciplina, tipo, tema, descritor e dificuldade estimada diretamente no formulário aberto. Série só quando informada; sem análise narrativa ou cartão duplicado.
+- BNCC excluída do contrato do Ollama e do preenchimento automático, inclusive quando o modelo envia esse campo indevidamente. Valores manuais existentes preservados. Cache antigo recalculado.
+- Validação: suíte completa com 99 testes (98 passaram, 1 integração opcional PostgreSQL ignorada); após acrescentar regressão de cache antigo, os 11 testes focados passaram. Builds backend/frontend passaram.
+- Navegador local e Qwen real: campos preenchidos, série/BNCC vazias, gabarito/status preservados; edição e Tab verificados com documento simulado. Nenhum teste com usuários humanos realizado.
+- Limitação: dificuldade é estimativa; descritor é descrição textual, sem validação oficial. Dados precisam ser conferidos e salvos pelo revisor.
+
+## 2026-11-07 — Status integrado e timeout incremental
+
+- Status, cancelamento e nova tentativa movidos para dentro da classificação pedagógica, junto dos campos. Banner separado removido.
+- Ollama recebe uma questão por chamada, com entrada e saída limitadas. Cada resultado é salvo e mostrado imediatamente.
+- Timeout tem uma nova tentativa; cancelamento interrompe também essa tentativa. Retry manual retoma o prefixo já classificado do mesmo conteúdo/modelo e preserva resultados parciais. Erro de timeout agora em português.
+- Cache v4 evita reutilização do fluxo anterior. Falhas de versão anterior também iniciam automaticamente o novo processamento na tela.
+- Suíte: 101 testes, 100 passaram e uma integração opcional PostgreSQL ignorada, sem falhas. Teste adicional simula timeout, resposta parcial, falha e retomada sem repetir questões concluídas.
+
+- Durante a validação foi reproduzido EPERM intermitente ao cancelar no Windows. Gravações do mesmo documento agora são serializadas, com retentativas curtas apenas para locks transitórios.
+- Salvar valores preenchidos pela IA não invalida as demais questões pendentes; alterações humanas de conteúdo, disciplina ou série continuam invalidando quando diferem da classificação aceita.
+- O modelo local excedeu 90s no teste real. Limite padrão por chamada ajustado para 300s (configurável por OLLAMA_TIMEOUT_MS), com instrução e saída menores. Isso evita interrupção prematura, mas não garante baixa latência; processamento continua fora do upload.
+
+Validação final: as duas questões do documento simulado foram preenchidas pelo Qwen local, com status Concluída dentro da ficha. Primeira salva enquanto a segunda ainda processava; segunda preenchida em seguida. Suíte final após as correções: 100 passaram, 1 integração opcional ignorada, zero falhas (101 testes). Builds dos dois projetos aprovados. Latência real próxima de três minutos por questão neste ambiente; melhoria de fluxo não equivale a garantia de rapidez do modelo.
+
+## 2026-11-07 — Meta de 15 segundos por classificação
+
+- Perfil final neste Dell G15: qwen3.5:2b, OLLAMA_NUM_GPU=16, contexto 2048, saída máxima de 192 tokens por questão. Configuração local aplicada sem alterar credenciais. Valores de exemplo publicados em .env.example.
+- IA retorna disciplina, série explícita, tema, descritor e dificuldade; backend associa áreas conhecidas e define múltipla escolha. Contexto reduzido somente na chamada de classificação, preservando a extração original. BNCC continua manual.
+- Benchmark reproduzível: npm run benchmark:classification -- qwen3.5:2b, executado em src/backend. Faz aquecimento, cinco áreas, verifica campos e retorna erro quando a amostra não atende a meta. Não equivale a avaliação pedagógica completa.
+- Resultado final da amostra: 5/5 abaixo de 15s e 5/5 nas verificações básicas; p50 4974ms, p95 5390ms, intervalo 4886–5390ms. Registro: docs/benchmarks/qwen3_5_2b-fast-gpu16.json.
+- Alternativas menores foram rápidas mas produziram classificações ruins; 0.8B e 1.5B não foram escolhidos. Relatórios dos experimentos foram preservados. Ensaios interrompidos de candidatos lentos não contam como benchmarks completos.
+- Primeiro teste de tela usou um servidor antigo na porta 3000, ainda com 4B. Instâncias duplicadas deste backend foram encerradas e uma única instância iniciada com o perfil correto. Corrigido o log de inicialização para não anunciar disponibilidade quando a porta está ocupada.
+- Em seguida foi observada chamada de 23,7s com o 4B antigo ainda residente. Após liberar esse modelo, uma nova questão sem resultado em cache completou em 4941ms no 2B, com campos preenchidos e indicação Dentro da meta de 15s na tela. Limite não é SLA: carregamento, fila, pressão de memória e complexidade podem elevar o tempo.
+- Métrica por questão inclui retentativa automática; fila e consulta do navegador ficam fora do orçamento. Teste de regressão verifica que o tempo da tentativa malsucedida não é ocultado. Cache v6 impede reutilização do perfil antigo.
+
+Validação final: suíte completa com 104 testes (103 aprovados, 1 integração PostgreSQL opcional ignorada), sem falhas; builds backend/frontend aprovados. Após o ajuste final da métrica configurável, os 15 testes focados passaram. Meta exibida agora usa o valor configurado e inclui tentativas malsucedidas. Estado final local: apenas uma instância deste backend atendendo a porta 3000, com configuração qwen3.5:2b/16 camadas.
+
+## Repetição imediata da classificação — CI Linux
+
+A primeira execução remota revelou uma corrida preexistente: uma tarefa com status failed ainda permanecia no mapa de tarefas ativas durante a gravação final, impedindo nova tentativa imediata. A deduplicação agora considera apenas queued/running; a gravação continua serializada e a limpeza antiga respeita a identidade da tarefa nova. O teste exige resposta 202 sem devolver a falha anterior. Não se trata de timeout do modelo nem de problema no banco.
+
+## Corpus OCR portátil — CI Linux
+
+A geração sintética com Arial dependia de fonte instalada no Windows e produziu texto incompleto no runner Linux. O corpus passou a rasterizar Helvetica padrão via PDF.js, usando os recursos de fontes do projeto. Mantidos todos os critérios do OCR real em PNG, JPEG e PDF escaneado. A nova amostra também revelou AJ5 sem espaço; a recuperação contextual agora aceita esse formato somente junto de alternativas vizinhas válidas. Regressão negativa de texto AI 5 permanece.
+
+## Navegação preserva envio e revisão — 07/11/2026
+
+Os links Enviar material e Banco de questões agora usam navegação interna. O componente de envio/revisão permanece montado: arquivo selecionado, requisição em andamento, resultado, questão selecionada, classificação e rascunhos locais sobrevivem à troca de tela. Voltar/avançar do navegador acompanha a tela pelo evento popstate. Links externos, abertura modificada/nova aba e links diretos de revisão mantêm comportamento normal. Ao entrar no banco, a consulta é renovada para mostrar novas aprovações.
+
+Validado em navegador com mentary-navegacao-simulado.pdf: selecionar arquivo, ir ao banco e retornar; enviar e sair durante a requisição; voltar à revisão com questão, alternativas e gabarito; editar responsável sem salvar, navegar ao banco e voltar pelo histórico, preservando rascunho e aviso de alterações. A classificação concluiu e preencheu os campos durante o ensaio. Lint e build frontend passaram. Não houve edição de documentos do usuário nem participantes humanos.
+
+Escopo: preservação durante a navegação interna na mesma aba. Recarregar a página, fechar a aba ou abrir links diretos continua iniciando outra instância; rascunhos não salvos não são persistidos em banco por esta alteração.
+
+## 11/11/2026 — Auditoria das issues e fechamento das lacunas do extrator
+
+Comparadas as 22 issues existentes com código, testes e histórias. US13–US20 não tinham issues: cadastradas como #27–#34, com critérios, prioridades e dependências. Por decisão do responsável, avaliações e dashboards permanecem no backlog; não foram implementados neste ciclo. Numeração documental padronizada em US.
+
+Correções implementadas:
+
+- A troca da página do recorte substitui a referência principal e mantém referências secundárias; coordenadas não finitas são rejeitadas antes do envio.
+- Falha de inspeção visual em PDF gera aviso persistido por página e preserva texto legível. O cancelamento continua sendo propagado. Salvar outros campos não converte uma associação incerta em manual nem remove seu aviso; confirmar o recorte resolve o aviso.
+- A mesma normalização de componentes incompletos é usada ao salvar e consultar uma revisão.
+- Salvamento mantém edições feitas durante a requisição; somente o rascunho efetivamente salvo é limpo.
+- Mudança da seleção limpa sua prévia; consulta/exportação não concorrem na tela, e sair do banco cancela a requisição pendente.
+- Classificação cancelada ou falha mostra explicitamente a quantidade de resultados parciais preservados.
+- Incluída a limpeza e separação de responsabilidades iniciada no ciclo anterior: tipos de revisão, campos pedagógicos, rascunhos, nomes da fila e remoção de código sem chamadas/arquivos vazios.
+
+Validação local: lint e builds dos dois projetos passaram. Suíte geral: 125 testes, 123 passaram, zero falhas e duas integrações opcionais desativadas. PostgreSQL real e OCR real são conferidos separadamente na execução remota da entrega. Não houve nova homologação com participantes humanos nem medição nova do desempenho pedagógico do modelo.
+
+Configurações administrativas: proteção da main não pôde ser consultada (HTTP 403); Projects não pôde ser administrado com as ferramentas da integração. Esses pontos não foram marcados como concluídos pela auditoria. Nenhum estado de issue foi alterado para encerrar trabalho ainda não integrado.
+
+## 12/11/2026 — Guia do código e revisão aprofundada
+
+- Publicados GUIA-DO-CODIGO.md e REVISAO-CODIGO.md, com mapa de serviços/componentes, fluxos, API, erros, dados, configuração, testes, manutenção e limites.
+- Issues #36–#43 registram documentação, retenção, concorrência parcial, erros/limites de renderização, autenticação, recuperação de rascunhos, fila distribuída e homologação humana. Avaliações/dashboards continuam no backlog #27–#34; não foram implementados.
+- Revisões concorrentes do mesmo documento são serializadas na instância atual. Leituras PostgreSQL usam snapshot consistente; garantia entre servidores/controle de versão continuam pendentes em #38.
+- Retenção agora inclui classificações; não remove documentos com análise ativa. Início/consulta e exclusão são coordenados, sem bloquear documentos independentes.
+- JSON inválido e excessivo retornam 400/413. OCR e prévia de PDF validam limites de canvas antes da alocação nativa.
+- Removidos contador permanentemente oculto, dados sem consumo no frontend, cinco exportações de tipos internas e configuração de teste sem efeito. Compatibilidades de dados antigos foram mantidas.
+- Novo npm run audit:source inventaria 49 arquivos de produção e 32 arquivos de teste; sem candidatos remanescentes a arquivos/exports/CSS sem referência. Análise auxiliar, não prova de ausência de todo código morto.
+- Validação local final: lint/build dos dois projetos aprovados; 133 testes, 131 aprovados, zero falhas e duas integrações opcionais desativadas na suíte geral. PostgreSQL e OCR reais são conferidos no novo commit do PR #35.
+
+Sem teste de carga, pesquisa com professores ou validação de múltiplas instâncias nesta rodada. Nenhum dado real, credencial ou estado de issue foi removido para simular conclusão.
+
+## 12/11/2026 — Teste de uso no navegador
+
+Ensaio com PDF/imagem/TXT fictícios, sem participantes humanos, detalhado em RELATORIO-TESTE-USO-2026-11-12.md. Verificados envio, classificação/cancelamento, edição, validação de aprovação, fonte visual, páginas desconhecidas, publicação/retirada, filtros, exportação, navegação, teclado e largura móvel de 390 px.
+
+Corrigidos seis problemas observados: digitação de várias habilidades BNCC consumia a vírgula; endereço da revisão não era preservado ao voltar do banco; título da aba não acompanhava a tela; feedback da questão anterior permanecia; lacuna A/C causada por OCR não gerava aviso específico de alternativas; cancelamento no navegador não fechava a conexão da API através do proxy Vite.
+
+JSON exportado conferido com duas habilidades separadas e gabarito correto. Publicação fictícia retirada ao final; nenhuma revisão real foi alterada. Cancelamento de envio durante OCR confirmado pela interface; inspeção posterior revelou processamento residual na API. Após corrigir o proxy, requisição real abortada deixou zero novos registros. Teste de regressão falhou com a configuração anterior e passou com a corrigida. Capturas locais em tmp/ux-20261112.
+
+Lint/build frontend e backend aprovados. Suíte geral: 138 testes, 136 aprovados, zero falhas, duas integrações opcionais separadas. O CI do commit final valida também PostgreSQL e OCR reais. Omissão de texto pelo OCR continua possível; a nova heurística sinaliza a lacuna sem inventar conteúdo.
+
+## 12/11/2026 — Recuperação, concorrência e início de avaliações
+
+Login/autorização retirados do escopo deste módulo por decisão do responsável: serão fornecidos pelo sistema principal. CI do PR #26 integrado à branch de trabalho no GitHub. Seletor PC/Celular incluído na entrega.
+
+Rascunhos locais optativos por até sete dias, recuperação/descarte/download e bloqueio de restauração sobre versão modificada. Questões recebem hash de revisão; o frontend envia a versão esperada e recebe 409 em conflito. Revisões PostgreSQL usam a mesma transação e trava por documento entre processos. Clientes legados devem passar a enviar expectedRevision.
+
+Fila PostgreSQL persiste entrada, parciais, cursor, posse, lease e tentativas; worker na inicialização e a cada dois segundos. Testes em processos independentes comprovaram exclusão mútua, queda, retomada sem repetir parcial confirmado e cancelamento entre servidores. Modo por arquivos continua local, com retentativa manual. Armazenamento compartilhado dos originais ainda depende da integração/infraestrutura.
+
+Primeira entrega de avaliações: importação JSON e API, snapshots e resultados persistidos, idempotência, correção com omissões, métricas por estudante/questão/BNCC/descritor, filtros de escola/turma/período e comparação de duas aplicações. Metas/alertas e análise longitudinal ficam para a continuação. Contrato e exemplo fictício em AVALIACOES-E-INTEGRACAO.md e EXEMPLO-AVALIACAO.json.
+
+Validação local: 143 testes gerais, 141 aprovados, zero falhas, duas integrações opcionais separadas. PostgreSQL: quatro testes aprovados, incluindo três cenários adicionais. Lint/build dos dois projetos aprovados. Inventário: 55 arquivos de produção, 36 arquivos de teste/apoio, sem candidatos sem referência.
+
+Ensaio de navegador em banco temporário isolado: recuperação após recarga, salvamento/limpeza do rascunho, dashboard com 2 acertos/1 erro/3 omissões (33,33%), comparação, largura de 390 px sem transbordamento da página e reimportação idempotente pelo seletor de arquivos. Console sem erros capturados. Não houve teste com professores: protocolo preparado em PROTOCOLO-HOMOLOGACAO.md, execução humana pendente em #43.
